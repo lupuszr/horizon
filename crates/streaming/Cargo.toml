@@ -1,15 +1,15 @@
 [package]
-name = "hybrid-streaming-api"
+name = "hybrid-streaming-streaming"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-hybrid-streaming-common = { path = "../common" }
-hybrid-streaming-auth = { path = "../auth" }
+# hybrid-streaming-common = { path = "../common" }
+# hybrid-streaming-auth = { path = "../auth" }
 hybrid-streaming-storage = { path = "../storage" }
-hybrid-streaming-streaming = { path = "../streaming" }
-hybrid-streaming-video = { path = "../video" }
+# hybrid-streaming-streaming = { path = "../streaming" }
+# hybrid-streaming-video = { path = "../video" }
 
 # Web framework and middleware
 axum.workspace = true
@@ -19,6 +19,7 @@ hyper = { version = "1.1", features = ["full"] }
 
 # Async runtime
 tokio.workspace = true
+async-trait.workspace = true
 futures = "0.3"
 
 # Request/Response handling
@@ -40,8 +41,8 @@ serde_json.workspace = true
 validator = { version = "0.16", features = ["derive"] }
 
 # OpenAPI documentation
-utoipa = { version = "4.1", features = ["axum"] }
-utoipa-swagger-ui = "5.0"
+# utoipa = { version = "4.1", features = ["axum"] }
+# utoipa-swagger-ui = "5.0"
 
 # Error handling and logging
 thiserror.workspace = true

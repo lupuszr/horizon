@@ -1,8 +1,8 @@
 [workspace]
 members = [
     # "crates/api",
-    # "crates/storage",
-    # "crates/streaming",
+    "crates/storage",
+    "crates/streaming",
     # "crates/video",
     # "crates/auth",
     "crates/common",
