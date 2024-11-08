@@ -1,0 +1,57 @@
+[package]
+name = "hybrid-streaming-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+hybrid-streaming-common = { path = "../common" }
+hybrid-streaming-auth = { path = "../auth" }
+hybrid-streaming-storage = { path = "../storage" }
+hybrid-streaming-streaming = { path = "../streaming" }
+hybrid-streaming-video = { path = "../video" }
+
+# Web framework and middleware
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+hyper = { version = "1.1", features = ["full"] }
+
+# Async runtime
+tokio.workspace = true
+futures = "0.3"
+
+# Request/Response handling
+bytes = "1.5"
+mime = "0.3"
+http = "1.0"
+http-body = "1.0"
+http-body-util = "0.1"
+
+# File upload handling
+multer = "3.0"
+tempfile = "3.10"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Validation
+validator = { version = "0.16", features = ["derive"] }
+
+# OpenAPI documentation
+utoipa = { version = "4.1", features = ["axum"] }
+utoipa-swagger-ui = "5.0"
+
+# Error handling and logging
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+
+# Metrics
+metrics = "0.21"
+metrics-exporter-prometheus = "0.12"
+
+[dev-dependencies]
+tokio-test.workspace = true
+axum-test = "14.2"

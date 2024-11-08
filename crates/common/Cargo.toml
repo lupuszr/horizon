@@ -1,0 +1,32 @@
+[package]
+name = "hybrid-streaming-common"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "hybrid_streaming_common"
+path = "src/lib.rs"
+
+[dependencies]
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling and logging
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Types
+uuid = { version = "1.7", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tokio-test = { workspace = true }

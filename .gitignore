@@ -1,0 +1,72 @@
+# Build output directories
+**/target/
+target/
+
+# Generated files
+**/*.rs.bk
+*.pdb
+
+# IDE and editor files
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# Debug files
+*.log
+debug/
+
+# Dependencies
+vendor/
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# Generated documentation
+doc/
+docs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Database files
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+# Video processing temporary files
+*.mp4.tmp
+*.ts
+*.m3u8
+
+# Certificate files
+*.pem
+*.key
+*.crt
+
+# Test coverage
+coverage/
+*.profraw
+*.profdata
+
+# Cargo specific
+Cargo.lock
+.cargo-ok
+
+# Optional: comment out if you want to track Cargo.lock
+# !Cargo.lock
+
+# FFmpeg related
+*.ffindex
+
+# Large media files
+*.mp4
+*.mov
+*.avi
+*.mkv

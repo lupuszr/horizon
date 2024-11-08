@@ -1,0 +1,58 @@
+[package]
+name = "hybrid-streaming-auth"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Async
+tokio = { workspace = true, features = ["full"] }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Cryptography and security
+jsonwebtoken = "9.2"
+argon2 = "0.5"           # Password hashing
+rand = "0.8"             # For generating secure tokens
+base64 = "0.21"          # For encoding/decoding tokens
+
+# Unique identifiers
+uuid = { version = "1.7", features = ["v4", "serde"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Database - Optional features for different backends
+[features]
+default = ["postgres"]
+postgres = ["sqlx/postgres"]
+sqlite = ["sqlx/sqlite"]
+
+# Database dependencies
+[dependencies.sqlx]
+version = "0.7"
+default-features = false
+features = [
+    "runtime-tokio",
+    "macros",
+    "uuid",
+    "chrono",
+    "json"
+]
+optional = true
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+fake = { version = "2.9", features = ["uuid", "chrono"] }
+rstest = "0.18"

@@ -1,0 +1,30 @@
+[package]
+name = "hybrid-streaming-video"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+hybrid-streaming-common = { path = "../common" }
+
+# Video processing
+ffmpeg-next.workspace = true
+
+# Async support
+tokio.workspace = true
+futures = "0.3"
+
+# File handling
+bytes = "1.5"
+tempfile = "3.10"
+
+# Error handling and logging
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+
+# Progress tracking and metrics
+indicatif = "0.17"
+
+[dev-dependencies]
+tokio-test.workspace = true

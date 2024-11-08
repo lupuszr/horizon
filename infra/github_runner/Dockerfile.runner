@@ -1,0 +1,39 @@
+# Use Ubuntu as base image
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set environment variables
+ENV RUNNER_HOME=/runner
+ENV CARGO_HOME=/opt/cargo
+ENV RUSTUP_HOME=/opt/rustup
+ENV PATH="/opt/cargo/bin:/opt/rustup/bin:${PATH}"
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    git \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories
+RUN mkdir -p $RUNNER_HOME $CARGO_HOME $RUSTUP_HOME
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && rustup component add rustfmt clippy
+
+# Add GitHub runner installation and startup script
+COPY scripts/start-runner.sh /start-runner.sh
+RUN chmod +x /start-runner.sh
+
+# Set working directory
+WORKDIR $RUNNER_HOME
+
+# Start the runner
+ENTRYPOINT ["/start-runner.sh"]
