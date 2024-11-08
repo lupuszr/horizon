@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use hybrid_streaming_common::ContentId;
 use thiserror::Error;
 use tracing::error;
 
@@ -16,10 +17,6 @@ pub enum StorageError {
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
-
-/// Represents the content identifier returned after uploading
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ContentId(pub String);
 
 /// Core storage traits that define the interface for our storage system
 #[async_trait::async_trait]

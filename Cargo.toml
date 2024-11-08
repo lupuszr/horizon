@@ -32,6 +32,15 @@ serde_json = "1.0"
 iroh = "0.12"
 quiche = "0.20"
 
+
+# IPFS related
+cid = "0.10"
+multihash = "0.18"
+multibase = "0.9"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
 # Video processing
 ffmpeg-next = "6.1"
 

@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-# hybrid-streaming-common = { path = "../common" }
+hybrid-streaming-common = { path = "../common" }
 # hybrid-streaming-auth = { path = "../auth" }
 hybrid-streaming-storage = { path = "../storage" }
 # hybrid-streaming-streaming = { path = "../streaming" }
@@ -16,6 +16,14 @@ axum.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 hyper = { version = "1.1", features = ["full"] }
+
+# Ipfs related
+cid.workspace = true
+multihash.workspace = true
+multibase.workspace = true
+
+# Time handling
+chrono.workspace = true
 
 # Async runtime
 tokio.workspace = true

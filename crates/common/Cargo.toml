@@ -27,6 +27,11 @@ tracing-subscriber = { workspace = true }
 # Types
 uuid = { version = "1.7", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+# Ipfs related
+cid.workspace = true
+multihash.workspace = true
+multibase.workspace = true
+
 
 [dev-dependencies]
 tokio-test = { workspace = true }
