@@ -22,7 +22,7 @@ pub struct VideoMetadata {
 }
 
 pub mod config {
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Default, Clone)]
     pub struct AppConfig {
         pub iroh_endpoint: String,
         pub jwt_secret: String,
