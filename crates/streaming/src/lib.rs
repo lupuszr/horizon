@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info};
+use tracing::error;
 
 #[derive(Error, Debug)]
 pub enum StreamingError {
@@ -190,17 +190,17 @@ mod tests {
 
     #[async_trait]
     impl hybrid_streaming_storage::Storage for MockStorage {
-        async fn upload_file(&self, path: &Path) -> Result<ContentId, StorageError> {
+        async fn upload_file(&self, _path: &Path) -> Result<ContentId, StorageError> {
             todo!()
         }
 
         /// Checks if content exists
-        async fn exists(&self, id: &ContentId) -> Result<bool, StorageError> {
+        async fn exists(&self, _id: &ContentId) -> Result<bool, StorageError> {
             Ok(true)
         }
 
         /// Deletes content if possible (may not be supported by all storage backends)
-        async fn delete(&self, id: &ContentId) -> Result<(), StorageError> {
+        async fn delete(&self, _id: &ContentId) -> Result<(), StorageError> {
             todo!()
         }
         async fn retrieve(&self, cid: &str) -> Result<Vec<u8>, StorageError> {
