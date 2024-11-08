@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  # Allow manual triggering
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings" # Treat warnings as errors
+
+jobs:
+  test:
+    name: Test
+    runs-on: [self-hosted, rust]
+    strategy:
+      fail-fast: false
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "deps-${{ matrix.rust }}"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Check formatting
+        if: matrix.rust == 'stable'
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        if: matrix.rust == 'stable'
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build
+        run: cargo build --verbose --workspace
+
+      - name: Run tests
+        run: cargo test --verbose --workspace
+
+      - name: Generate docs
+        if: matrix.rust == 'stable'
+        run: cargo doc --no-deps --workspace
+
+  coverage:
+    name: Code coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "coverage"
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate code coverage
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
+
+  msrv:
+    name: Check MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check minimum supported rust version
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.70.0  # Adjust this to your MSRV
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "msrv"
+
+      - name: Build with MSRV
+        run: cargo build --verbose --workspace
+
+  security_audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+  # # Optional: Add benchmarking on main branch changes
+  # benchmark:
+  #   name: Benchmark
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - uses: actions/checkout@v4
+
+  #     - name: Setup Rust toolchain
+  #       uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: stable
+
+  #     - name: Cache dependencies
+  #       uses: Swatinem/rust-cache@v2
+  #       with:
+  #         shared-key: "bench"
+
+  #     - name: Run benchmarks
+  #       run: cargo bench --workspace
+
+  #     # Optional: Store benchmark results
+  #     - name: Store benchmark result
+  #       uses: benchmark-action/github-action-benchmark@v1
+  #       with:
+  #         tool: 'cargo'
+  #         output-file-path: target/criterion/results.txt
+  #         github-token: ${{ secrets.GITHUB_TOKEN }}
+  #         auto-push: true
+  #         # Show alert with commit comment on detecting possible performance regression
+  #         alert-threshold: '200%'
+  #         comment-on-alert: true
+  #         fail-on-alert: true
