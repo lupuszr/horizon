@@ -1,11 +1,11 @@
 [package]
-name = "hybrid-streaming-common"
+name = "horizon-core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
 [lib]
-name = "hybrid_streaming_common"
+name = "horizon_common"
 path = "src/lib.rs"
 
 [dependencies]

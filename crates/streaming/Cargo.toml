@@ -1,15 +1,15 @@
 [package]
-name = "hybrid-streaming-streaming"
+name = "horizon-streaming"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-hybrid-streaming-common = { path = "../common" }
-# hybrid-streaming-auth = { path = "../auth" }
-hybrid-streaming-storage = { path = "../storage" }
-# hybrid-streaming-streaming = { path = "../streaming" }
-# hybrid-streaming-video = { path = "../video" }
+horizon-core = { path = "../common" }
+# horizon-auth = { path = "../auth" }
+horizon-storage = { path = "../storage" }
+# horizon-streaming = { path = "../streaming" }
+# horizon-video = { path = "../video" }
 
 # Web framework and middleware
 axum.workspace = true

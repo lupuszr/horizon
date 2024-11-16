@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use hybrid_streaming_common::ContentId;
+use horizon_common::ContentId;
 use thiserror::Error;
 use tracing::error;
 

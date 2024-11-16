@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use cid::Cid;
-use hybrid_streaming_common::{ContentId, StreamingError};
+use futures::AsyncWriteExt;
+use horizon_common::{ContentId, StreamingError};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -85,11 +86,11 @@ pub trait Streaming: Send + Sync + 'static {
 #[derive(Clone)]
 pub struct CidStreaming {
     config: StreamConfig,
-    storage: Arc<dyn hybrid_streaming_storage::Storage>,
+    storage: Arc<dyn horizon_storage::Storage>,
 }
 
 impl CidStreaming {
-    pub fn new(config: StreamConfig, storage: Arc<dyn hybrid_streaming_storage::Storage>) -> Self {
+    pub fn new(config: StreamConfig, storage: Arc<dyn horizon_storage::Storage>) -> Self {
         Self { config, storage }
     }
 
@@ -123,7 +124,7 @@ impl Streaming for CidStreaming {
             .retrieve(&cid.to_string())
             .await
             .map_err(|e| StreamingError::StorageError(e.to_string()))?;
-
+        println!("manifest data:: {:?}", manifest_data.clone());
         serde_json::from_slice(&manifest_data)
             .map_err(|e| StreamingError::InvalidManifest(e.to_string()))
     }
@@ -173,8 +174,8 @@ impl Streaming for CidStreaming {
 
 #[cfg(test)]
 mod tests {
-    use hybrid_streaming_common::ContentId;
-    use hybrid_streaming_storage::StorageError;
+    use horizon_common::ContentId;
+    use horizon_storage::StorageError;
     use multihash::MultihashDigest;
     use tokio::time::timeout;
 
@@ -200,7 +201,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl hybrid_streaming_storage::Storage for MockStorage {
+    impl horizon_storage::Storage for MockStorage {
         async fn upload_file(&self, _path: &Path) -> Result<ContentId, StorageError> {
             todo!()
         }
@@ -216,7 +217,7 @@ mod tests {
         }
         async fn retrieve(&self, cid: &str) -> Result<Vec<u8>, StorageError> {
             self.data.read().await.get(cid).cloned().ok_or(
-                hybrid_streaming_storage::StorageError::NotFound(cid.to_string()),
+                horizon_storage::StorageError::NotFound(cid.to_string()),
             )
         }
 

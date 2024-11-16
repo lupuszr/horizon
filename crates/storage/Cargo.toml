@@ -1,11 +1,11 @@
 [package]
-name = "hybrid-streaming-storage"
+name = "horizon-storage"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-hybrid-streaming-common = { path = "../common" }
+horizon-core = { path = "../common" }
 
 # Iroh dependencies
 iroh.workspace = true

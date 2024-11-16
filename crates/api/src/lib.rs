@@ -12,10 +12,10 @@ use tower_http::trace::TraceLayer;
 use tracing::{info, error};
 
 // Re-export key types
-pub use hybrid_streaming_auth as auth;
-pub use hybrid_streaming_storage as storage;
-pub use hybrid_streaming_streaming as streaming;
-pub use hybrid_streaming_video as video;
+pub use horizon_auth as auth;
+pub use horizon_storage as storage;
+pub use horizon_streaming as streaming;
+pub use horizon_video as video;
 
 #[derive(Error, Debug)]
 pub enum ApiError {

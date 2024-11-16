@@ -1,4 +1,4 @@
-use hybrid_streaming_storage::{DefaultStorage, Storage};
+use horizon_storage::{DefaultStorage, Storage};
 use std::path::PathBuf;
 
 #[tokio::main]
