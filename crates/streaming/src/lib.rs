@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use cid::Cid;
 use futures::AsyncWriteExt;
-use horizon_common::{ContentId, StreamingError};
+use horizon_core::{ContentId, StreamingError};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -174,7 +174,7 @@ impl Streaming for CidStreaming {
 
 #[cfg(test)]
 mod tests {
-    use horizon_common::ContentId;
+    use horizon_core::ContentId;
     use horizon_storage::StorageError;
     use multihash::MultihashDigest;
     use tokio::time::timeout;

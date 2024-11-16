@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [lib]
-name = "horizon_common"
+name = "horizon_core"
 path = "src/lib.rs"
 
 [dependencies]

@@ -5,7 +5,9 @@ members = [
     "crates/streaming",
     # "crates/video",
     # "crates/auth",
-    "crates/common",
+    "crates/core",
+    "crates/plugin"
+    # "examples/video_stream"
 ]
 resolver = "2"
 
@@ -23,6 +25,8 @@ tower = "0.4"
 async-trait = "0.1.83"
 tower-http = { version = "0.5", features = ["trace", "cors"] }
 futures = "0.3.31"
+tokio-util = { version = "0.7", features = ["io"] }
+tokio-stream = "0.1"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

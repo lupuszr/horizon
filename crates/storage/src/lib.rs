@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use horizon_common::ContentId;
+use horizon_core::ContentId;
 use thiserror::Error;
 use tracing::error;
 
