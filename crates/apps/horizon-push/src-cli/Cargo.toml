@@ -1,0 +1,41 @@
+
+[package]
+name = "horizon-push-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "horizon-cli"
+path = "main.rs"
+
+[dependencies]
+# Core dependencies from workspace
+tokio = { workspace = true }
+iroh = { workspace = true }
+iroh-base = { workspace = true }
+iroh-blobs = { workspace = true }
+async-trait = { workspace = true }
+tokio-util = { workspace = true }
+tokio-stream = { workspace = true }
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono.workspace = true
+
+# Errors
+thiserror = { workspace = true }
+
+# cli
+clap = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+bytes = "1.5"
+base64 = "0.21"
+tempfile = "3.10"
+
+# Local crates
+horizon-core = { path = "../../../../crates/core" }
