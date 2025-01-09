@@ -1,8 +1,12 @@
-use std::{fmt::Display, str::FromStr};
-
 use cid::{Cid, Version};
 use serde::{Deserialize, Serialize};
+use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
+
+pub mod errors;
+pub mod iroh;
+
+// TODO: deprecate this
 
 #[derive(Error, Debug)]
 pub enum StreamingError {

@@ -17,7 +17,8 @@ futures = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
-
+data-encoding = { workspace = true }
+chrono.workspace = true
 # Error handling and logging
 thiserror = { workspace = true }
 anyhow = { workspace = true }
@@ -26,11 +27,41 @@ tracing-subscriber = { workspace = true }
 
 # Types
 uuid = { version = "1.7", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
 # Ipfs related
 cid.workspace = true
 multihash.workspace = true
 multibase.workspace = true
+
+
+iroh = { workspace = true }
+iroh-base = { workspace = true }
+walkdir = { workspace = true }
+iroh-blobs = { workspace = true }
+tokio-util = { workspace = true }
+tokio-stream = { workspace = true }
+async-channel = { workspace = true }
+futures-buffered = { workspace = true }
+futures-lite = { workspace = true }
+
+
+# cli
+clap = { workspace = true }
+
+# console utils
+console = { workspace = true }
+indicatif = { workspace = true }
+
+
+# randomness 
+rand = { workspace = true }# Utilities
+
+bytes = "1.5"
+base64 = "0.21"
+tempfile = "3.10"
+
+num_cpus = { workspace = true }
+
+
 
 
 [dev-dependencies]
