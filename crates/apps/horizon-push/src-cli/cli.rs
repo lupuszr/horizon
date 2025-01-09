@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use tokio::sync::mpsc;
 
 use crate::error::AppError;
 use crate::receive::HorizonPushReceive;
@@ -13,9 +14,12 @@ pub struct Cli {
 
 impl Cli {
     pub async fn eval(self) -> Result<bool, AppError> {
+        let (tx_send, _rx) = mpsc::channel(1);
+        let (tx_receive, _rx) = mpsc::channel(1);
+
         let cmd: Result<bool, AppError> = match self.command {
-            HorizonPushCommand::Send(sm) => sm.eval().await,
-            HorizonPushCommand::Receive(sm) => sm.eval().await,
+            HorizonPushCommand::Send(sm) => sm.eval(tx_send).await,
+            HorizonPushCommand::Receive(sm) => sm.eval(tx_receive).await,
         };
         cmd?;
         Ok(true)

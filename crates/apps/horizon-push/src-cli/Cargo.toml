@@ -4,22 +4,36 @@ name = "horizon-push-cli"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "horizon_push_cli"
+path = "lib.rs"
+
 [[bin]]
 name = "horizon-cli"
 path = "main.rs"
+
+
+[[test]]
+name = "simple_interaction_1"
+path = "test/simple_interaction.rs"
 
 [dependencies]
 # Core dependencies from workspace
 tokio = { workspace = true }
 iroh = { workspace = true }
 iroh-base = { workspace = true }
+walkdir = { workspace = true }
 iroh-blobs = { workspace = true }
 async-trait = { workspace = true }
 tokio-util = { workspace = true }
 tokio-stream = { workspace = true }
+async-channel = { workspace = true }
+futures-buffered = { workspace = true }
+futures-lite = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+data-encoding = { workspace = true }
 chrono.workspace = true
 
 # Errors
@@ -28,14 +42,23 @@ thiserror = { workspace = true }
 # cli
 clap = { workspace = true }
 
+# console utils
+console = { workspace = true }
+indicatif = { workspace = true }
+
 # Logging
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Utilities
+# randomness 
+rand = { workspace = true }# Utilities
+
 bytes = "1.5"
 base64 = "0.21"
 tempfile = "3.10"
 
+num_cpus = { workspace = true }
+
 # Local crates
 horizon-core = { path = "../../../../crates/core" }
+

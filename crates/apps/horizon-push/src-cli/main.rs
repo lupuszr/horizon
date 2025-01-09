@@ -1,16 +1,7 @@
 use clap::Parser;
-use std::{path::PathBuf, str::FromStr};
-use thiserror::Error;
-// use anyhow::Result;
-use iroh::{protocol::Router, Endpoint};
-use iroh_base::ticket::BlobTicket;
-use iroh_blobs::{
-    net_protocol::Blobs,
-    rpc::client::blobs::{ReadAtLen, WrapOption},
-    util::{local_pool::LocalPool, SetTagOption},
-};
 
 pub mod cli;
+pub mod common;
 pub mod error;
 pub mod receive;
 pub mod send;
