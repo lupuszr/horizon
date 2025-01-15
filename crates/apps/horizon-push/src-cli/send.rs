@@ -2,9 +2,11 @@ use data_encoding::HEXLOWER;
 use indicatif::HumanBytes;
 use rand::Rng;
 // use anyhow::Result;
-use iroh::{protocol::Router, AddrInfoOptions, Endpoint};
-use iroh_base::ticket::BlobTicket;
-use iroh_blobs::{net_protocol::Blobs, util::local_pool::LocalPool, BlobFormat};
+use iroh::{protocol::Router, Endpoint};
+// use iroh_base::ticket::BlobTicket;
+use iroh_blobs::{
+    net_protocol::Blobs, ticket::BlobTicket, util::local_pool::LocalPool, BlobFormat,
+};
 
 use clap::Args;
 use tokio::sync::mpsc;
@@ -73,7 +75,7 @@ impl HorizonPushSend {
             .node_addr()
             .await
             .map_err(|err| AppError::IrohEndpointError(err.to_string()))?;
-        addr.apply_options(AddrInfoOptions::RelayAndAddresses);
+        // addr.apply_options(AddrInfoOptions::RelayAndAddresses);
         let ticket = BlobTicket::new(addr, hash, BlobFormat::HashSeq)
             .map_err(|err| AppError::IrohBlobTicketCreationError(err.to_string()))?;
         let entry_type = if path.is_file() { "file" } else { "directory" };

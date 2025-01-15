@@ -6,7 +6,7 @@ use indicatif::{
     HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle,
 };
 
-use iroh::{key::SecretKey, RelayMap, RelayMode, RelayUrl};
+use iroh::{RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_blobs::{
     format::collection::Collection,
     provider::{self, CustomEventSender},
@@ -393,7 +393,8 @@ pub fn get_or_create_secret() -> Result<SecretKey, AppError> {
         Ok(secret) => SecretKey::from_str(&secret)
             .map_err(|_err| AppError::IrohSecretKeyError("Not a valid secret".to_string())),
         Err(_) => {
-            let key = SecretKey::generate();
+            let rand = rand::rngs::OsRng;
+            let key = SecretKey::generate(rand);
             eprintln!("using secret key {}", key);
             Ok(key)
         }
