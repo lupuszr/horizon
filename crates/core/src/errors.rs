@@ -35,6 +35,12 @@ pub enum AppError {
     #[error("Iroh Blob read error: {0}")]
     IrohBlobReadError(String),
 
+    #[error("Iroh Docs error: {0}")]
+    IrohDocsError(String),
+
+    #[error("Iroh gossip error: {0}")]
+    IrohGossipError(String),
+
     #[error("Iroh secret key error: {0}")]
     IrohSecretKeyError(String),
 
@@ -67,4 +73,7 @@ pub enum AppError {
 
     #[error("Internal state error: {0}")]
     InternalStateError(String),
+
+    #[error("Internal channel error: {0}")]
+    InternalChannelError(String),
 }

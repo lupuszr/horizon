@@ -6,11 +6,13 @@ use indicatif::{
     HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle,
 };
 
-use iroh::{key::SecretKey, RelayMap, RelayMode, RelayUrl};
+use iroh::{RelayMap, RelayMode, RelayUrl};
+use iroh_base::SecretKey;
 use iroh_blobs::{
     format::collection::Collection,
+    net_protocol::Blobs,
     provider::{self, CustomEventSender},
-    store::{ExportMode, ImportMode, ImportProgress},
+    store::{fs::Store, ExportMode, ImportMode, ImportProgress},
     util::fs::canonicalized_path_to_string,
     BlobFormat, TempTag,
 };
@@ -23,9 +25,23 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tokio::sync::mpsc;
 use walkdir::WalkDir;
 
+use anyhow::Result;
+use iroh::protocol::Router;
+use iroh_blobs::util::local_pool::LocalPool;
+use quic_rpc::transport::flume::FlumeConnector;
+
+pub(crate) type BlobsClient = iroh_blobs::rpc::client::blobs::Client<
+    FlumeConnector<iroh_blobs::rpc::proto::Response, iroh_blobs::rpc::proto::Request>,
+>;
+pub(crate) type DocsClient = iroh_docs::rpc::client::docs::Client<
+    FlumeConnector<iroh_docs::rpc::proto::Response, iroh_docs::rpc::proto::Request>,
+>;
 use crate::errors::AppError;
+
+use super::client_status::{HorizonChannel, IrohClientStatus};
 
 // use core::core::errors::AppError;
 
@@ -395,9 +411,95 @@ pub fn get_or_create_secret() -> Result<SecretKey, AppError> {
         Ok(secret) => SecretKey::from_str(&secret)
             .map_err(|_err| AppError::IrohSecretKeyError("Not a valid secret".to_string())),
         Err(_) => {
-            let key = SecretKey::generate();
+            let rand = rand::rngs::OsRng;
+            let key = SecretKey::generate(rand);
             eprintln!("using secret key {}", key);
             Ok(key)
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct IrohState {
+    _local_pool: Arc<LocalPool>,
+    pub router: Router,
+    pub blobs: BlobsClient,
+    pub docs: DocsClient,
+    pub blobs_store: Blobs<Store>,
+}
+
+impl IrohState {
+    pub async fn new(
+        path: PathBuf,
+        sender: mpsc::Sender<HorizonChannel>,
+    ) -> Result<Self, AppError> {
+        // create dir if it doesn't already exist
+        tokio::fs::create_dir_all(&path)
+            .await
+            .map_err(|e| AppError::FsError(e.to_string()))?;
+
+        let key = iroh_blobs::util::fs::load_secret_key(path.clone().join("keypair"))
+            .await
+            .map_err(|err| AppError::IrohSecretKeyError(err.to_string()))?;
+
+        // local thread pool manager for blobs
+        let local_pool = LocalPool::default();
+
+        // create endpoint
+        let endpoint = iroh::Endpoint::builder()
+            .discovery_n0()
+            .secret_key(key)
+            .bind()
+            .await
+            .map_err(|e| AppError::IrohEndpointError(e.to_string()))?;
+
+        // build the protocol router
+        let mut builder = iroh::protocol::Router::builder(endpoint);
+
+        // add iroh gossip
+        let gossip = iroh_gossip::net::Gossip::builder()
+            .spawn(builder.endpoint().clone())
+            .await
+            .map_err(|err| AppError::IrohGossipError(err.to_string()))?;
+        builder = builder.accept(iroh_gossip::ALPN, Arc::new(gossip.clone()));
+
+        let client_status = IrohClientStatus { sender };
+        // add iroh blobs
+        let blobs = iroh_blobs::net_protocol::Blobs::persistent(&path)
+            .await
+            .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?
+            .events(client_status.into())
+            .build(&local_pool.handle(), builder.endpoint());
+
+        builder = builder.accept(iroh_blobs::ALPN, blobs.clone());
+
+        // add docs
+        let docs = iroh_docs::protocol::Docs::persistent(path)
+            .spawn(&blobs, &gossip)
+            .await
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+        builder = builder.accept(iroh_docs::ALPN, Arc::new(docs.clone()));
+
+        let router = builder
+            .spawn()
+            .await
+            .map_err(|e| AppError::IrohRouterError(e.to_string()))?;
+
+        // Err(router)
+
+        let blobs_client = blobs.client().clone();
+        let docs_client = docs.client().clone();
+
+        Ok(Self {
+            _local_pool: Arc::new(local_pool),
+            router,
+            blobs: blobs_client,
+            blobs_store: blobs,
+            docs: docs_client,
+        })
+    }
+
+    pub(crate) async fn shutdown(self) -> Result<()> {
+        self.router.shutdown().await
     }
 }

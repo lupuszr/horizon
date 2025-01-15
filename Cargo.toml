@@ -13,6 +13,18 @@ members = [
 ]
 resolver = "2"
 
+[profile.dev]
+incremental = true
+opt-level = 0
+debug = 1
+split-debuginfo = "packed"
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+panic = "abort"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
@@ -44,13 +56,15 @@ data-encoding = "2.6.0"
 clap = { version = "4.5.8", features = ["derive", "env"] }
 
 # Storage and networking
-iroh = "0.29.0"
-iroh-base = "0.29.0"
-iroh-blobs = "0.29.0"
-iroh-docs = "0.29.0"
+iroh = "0.30.0"
+iroh-base = "0.30.0"
 quiche = "0.20"
 walkdir = "2.4.0"
-
+quic-rpc = { version = "0.17" }
+iroh-docs = { version = "0.30", features = ["rpc"] }
+iroh-blobs = { version = "0.30", features = ["rpc"] }
+iroh-gossip = { version = "0.30", features = ["rpc"] }
+iroh-node-util = "0.30"
 
 
 # IPFS related
@@ -87,6 +101,8 @@ console = "0.15.7"
 rand = "0.8.5"
 
 num_cpus = "1.16.0"
+
+dirs-next = "2.0.0"
 
 
 uuid = { version = "1.7", features = ["v4", "serde"] }

@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use iroh::{protocol::Router, ticket::BlobTicket, AddrInfoOptions};
-use iroh_blobs::BlobFormat;
+use iroh::protocol::Router;
+use iroh_blobs::{ticket::BlobTicket, BlobFormat};
+use iroh_docs::rpc::AddrInfoOptions;
 
 use crate::errors::AppError;
 
@@ -20,9 +21,11 @@ pub async fn generate_blob_ticket(
         .node_addr()
         .await
         .map_err(|err| AppError::IrohEndpointError(err.to_string()))?;
-    addr.apply_options(AddrInfoOptions::RelayAndAddresses);
+    // addr.apply_options(AddrInfoOptions::RelayAndAddresses);
     let ticket = BlobTicket::new(addr, hash, BlobFormat::HashSeq)
         .map_err(|err| AppError::IrohBlobTicketCreationError(err.to_string()))?;
+
+    println!("ticket is:: {}", ticket.clone());
 
     Ok(ticket)
 }

@@ -35,8 +35,12 @@ multibase.workspace = true
 
 iroh = { workspace = true }
 iroh-base = { workspace = true }
-walkdir = { workspace = true }
+quic-rpc = { workspace = true }
+iroh-docs = { workspace = true }
 iroh-blobs = { workspace = true }
+iroh-gossip = { workspace = true }
+iroh-node-util = "0.30"
+walkdir = { workspace = true }
 tokio-util = { workspace = true }
 tokio-stream = { workspace = true }
 async-channel = { workspace = true }
