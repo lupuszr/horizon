@@ -1,23 +1,14 @@
-use data_encoding::HEXLOWER;
-use futures_lite::{FutureExt, StreamExt};
 use horizon_core::{
     errors::AppError,
     iroh::{
         client_status::HorizonChannel,
-        common::{import, CommonArgs, IrohState, SendStatus},
-        endpoint::initialize_iroh_endpoint,
-        ticket::generate_blob_ticket,
+        common::{CommonArgs, IrohState},
     },
 };
-use iroh::{protocol::Router, Endpoint};
-use iroh_blobs::{
-    net_protocol::Blobs, provider::TransferStats, ticket::BlobTicket, util::local_pool::LocalPool,
-};
-use rand::Rng;
-use std::sync::Arc;
+use iroh_blobs::ticket::BlobTicket;
 use std::{collections::HashMap, fmt};
 use std::{env, path::PathBuf};
-use tauri::{App, AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, Mutex};
 
 #[derive(Debug, Clone)]
@@ -131,7 +122,7 @@ impl HorizonPushSend {
         state: &HorizonState,
         operation_id: String,
     ) -> Result<bool, AppError> {
-        let Self { path, common } = self;
+        let Self { path, .. } = self;
 
         let iroh = state.iroh.clone();
         let blobs = iroh.clone().blobs;
@@ -318,7 +309,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let handle2 = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let res = setup(handle, tx).await.unwrap();
+                setup(handle, tx).await.unwrap();
             });
             tauri::async_runtime::spawn(async move {
                 while let Some(ev) = rx.recv().await {

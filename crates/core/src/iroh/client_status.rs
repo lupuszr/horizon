@@ -1,9 +1,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use futures::SinkExt;
 use futures_lite::future::Boxed;
-use iroh_blobs::provider::{self, CustomEventSender, TransferStats};
+use iroh_blobs::provider::{self, CustomEventSender};
 use iroh_blobs::Hash;
 use serde::Serialize;
 use tokio::sync::mpsc;
@@ -91,8 +90,8 @@ impl CustomEventSender for IrohClientStatus {
             }
             provider::Event::GetRequestReceived {
                 connection_id,
-                request_id,
                 hash,
+                ..
             } => Some(HorizonChannel::IrohSenderEvent {
                 status: format!("get-request-received"),
                 connection_id,

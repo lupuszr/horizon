@@ -14,23 +14,23 @@ use super::{client_status::HorizonChannel, common::IrohState};
 
 pub async fn show_export_progress(
     mut stream: impl Stream<Item = anyhow::Result<ExportProgress>> + Unpin,
-    tx: mpsc::Sender<HorizonChannel>,
+    _tx: mpsc::Sender<HorizonChannel>,
 ) -> Result<(), AppError> {
     while let Some(x) = stream.next().await {
-        let x = x.map_err(|err| AppError::IrohBlobExportProgressError(err.to_string()))?;
-        match x {
-            ExportProgress::Found {
-                id,
-                hash,
-                size,
-                outpath,
-                meta,
-            } => todo!(),
-            ExportProgress::Progress { id, offset } => todo!(),
-            ExportProgress::Done { id } => todo!(),
-            ExportProgress::AllDone => todo!(),
-            ExportProgress::Abort(error) => todo!(),
-        }
+        let _x = x.map_err(|err| AppError::IrohBlobExportProgressError(err.to_string()))?;
+        // match x {
+        //     ExportProgress::Found {
+        //         id,
+        //         hash,
+        //         size,
+        //         outpath,
+        //         meta,
+        //     } => todo!(),
+        //     ExportProgress::Progress { id, offset } => todo!(),
+        //     ExportProgress::Done { id } => todo!(),
+        //     ExportProgress::AllDone => todo!(),
+        //     ExportProgress::Abort(error) => todo!(),
+        // }
     }
     Ok(())
 }

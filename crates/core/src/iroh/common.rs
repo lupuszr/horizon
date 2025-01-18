@@ -1,32 +1,20 @@
 use clap::Parser;
-use console::style;
-use futures_buffered::BufferedStreamExt;
-use futures_lite::{future::Boxed, StreamExt};
-use indicatif::{
-    HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle,
-};
 
-use iroh::{Endpoint, RelayMap, RelayMode, RelayUrl};
+use iroh::{RelayMap, RelayMode, RelayUrl};
 use iroh_base::SecretKey;
 use iroh_blobs::{
     format::collection::Collection,
     net_protocol::Blobs,
-    provider::{self, CustomEventSender},
-    store::{fs::Store, ExportMode, ImportMode, ImportProgress},
-    util::fs::canonicalized_path_to_string,
-    BlobFormat, TempTag,
+    store::{fs::Store, ExportMode},
 };
 use std::{
-    collections::BTreeMap,
     fmt::{Display, Formatter},
     net::{SocketAddrV4, SocketAddrV6},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
-    time::Duration,
 };
 use tokio::sync::mpsc;
-use walkdir::WalkDir;
 
 use anyhow::Result;
 use iroh::protocol::Router;
@@ -42,8 +30,6 @@ pub(crate) type DocsClient = iroh_docs::rpc::client::docs::Client<
 use crate::errors::AppError;
 
 use super::client_status::{HorizonChannel, IrohClientStatus};
-
-// use core::core::errors::AppError;
 
 /// Available command line options for configuring relays.
 #[derive(Clone, Debug)]
@@ -118,234 +104,6 @@ pub struct CommonArgs {
     /// to configure default servers.
     #[clap(long, default_value_t = RelayModeOption::Default)]
     pub relay: RelayModeOption,
-}
-
-#[derive(Debug, Clone)]
-pub struct SendStatus {
-    /// the multiprogress bar
-    mp: MultiProgress,
-}
-
-impl SendStatus {
-    pub fn new() -> Self {
-        let mp = MultiProgress::new();
-        mp.set_draw_target(ProgressDrawTarget::stderr());
-        Self { mp }
-    }
-
-    pub fn new_client(&self) -> ClientStatus {
-        let current = self.mp.add(ProgressBar::hidden());
-        current.set_style(
-            ProgressStyle::default_spinner()
-                .template("{spinner:.green} [{elapsed_precise}] {msg}")
-                .unwrap(),
-        );
-        current.enable_steady_tick(Duration::from_millis(100));
-        current.set_message("waiting for requests");
-        ClientStatus {
-            current: current.into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ClientStatus {
-    current: Arc<ProgressBar>,
-}
-
-impl Drop for ClientStatus {
-    fn drop(&mut self) {
-        if Arc::strong_count(&self.current) == 1 {
-            self.current.finish_and_clear();
-        }
-    }
-}
-
-impl CustomEventSender for ClientStatus {
-    fn send(&self, event: iroh_blobs::provider::Event) -> Boxed<()> {
-        self.try_send(event);
-        Box::pin(std::future::ready(()))
-    }
-
-    fn try_send(&self, event: provider::Event) {
-        tracing::info!("{:?}", event);
-        let msg = match event {
-            provider::Event::ClientConnected { connection_id } => {
-                Some(format!("{} got connection", connection_id))
-            }
-            provider::Event::TransferBlobCompleted {
-                connection_id,
-                hash,
-                index,
-                size,
-                ..
-            } => Some(format!(
-                "{} transfer blob completed {} {} {}",
-                connection_id,
-                hash,
-                index,
-                HumanBytes(size)
-            )),
-            provider::Event::TransferCompleted {
-                connection_id,
-                stats,
-                ..
-            } => Some(format!(
-                "{} transfer completed {} {}",
-                connection_id,
-                stats.send.write_bytes.size,
-                HumanDuration(stats.send.write_bytes.stats.duration)
-            )),
-            provider::Event::TransferAborted { connection_id, .. } => {
-                Some(format!("{} transfer completed", connection_id))
-            }
-            _ => None,
-        };
-        if let Some(msg) = msg {
-            self.current.set_message(msg);
-        }
-    }
-}
-
-pub async fn show_ingest_progress(
-    recv: async_channel::Receiver<ImportProgress>,
-) -> Result<(), AppError> {
-    let mp = MultiProgress::new();
-    mp.set_draw_target(ProgressDrawTarget::stderr());
-    let op = mp.add(ProgressBar::hidden());
-    op.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} [{elapsed_precise}] {msg}")
-            .map_err(|err| AppError::UIError(err.to_string()))?,
-    );
-    // op.set_message(format!("{} Ingesting ...\n", style("[1/2]").bold().dim()));
-    // op.set_length(total_files);
-    let mut names = BTreeMap::new();
-    let mut sizes = BTreeMap::new();
-    let mut pbs = BTreeMap::new();
-    loop {
-        let event = recv.recv().await;
-        match event {
-            Ok(ImportProgress::Found { id, name }) => {
-                names.insert(id, name);
-            }
-            Ok(ImportProgress::Size { id, size }) => {
-                sizes.insert(id, size);
-                let total_size = sizes.values().sum::<u64>();
-                op.set_message(format!(
-                    "{} Ingesting {} files, {}\n",
-                    style("[1/2]").bold().dim(),
-                    sizes.len(),
-                    HumanBytes(total_size)
-                ));
-                let name = names.get(&id).cloned().unwrap_or_default();
-                let pb = mp.add(ProgressBar::hidden());
-                pb.set_style(ProgressStyle::with_template(
-                    "{msg}{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes}",
-                ).map_err(|err| AppError::UIError(err.to_string()))?.progress_chars("#>-"));
-                pb.set_message(format!("{} {}", style("[2/2]").bold().dim(), name));
-                pb.set_length(size);
-                pbs.insert(id, pb);
-            }
-            Ok(ImportProgress::OutboardProgress { id, offset }) => {
-                if let Some(pb) = pbs.get(&id) {
-                    pb.set_position(offset);
-                }
-            }
-            Ok(ImportProgress::OutboardDone { id, .. }) => {
-                // you are not guaranteed to get any OutboardProgress
-                if let Some(pb) = pbs.remove(&id) {
-                    pb.finish_and_clear();
-                }
-            }
-            Ok(ImportProgress::CopyProgress { .. }) => {
-                // we are not copying anything
-            }
-            Err(e) => {
-                op.set_message(format!("Error receiving progress: {e}"));
-                break;
-            }
-        }
-    }
-    op.finish_and_clear();
-    Ok(())
-}
-
-pub async fn import(
-    path: PathBuf,
-    db: impl iroh_blobs::store::Store,
-) -> Result<(TempTag, u64, Collection), AppError> {
-    let path = path
-        .canonicalize()
-        .map_err(|err| AppError::PathError(err.to_string()))?;
-    // anyhow::ensure!(path.exists(), "path {} does not exist", path.display());
-    let root = path
-        .parent()
-        .ok_or(AppError::PathError("get parrent".to_string()))?;
-    // walkdir also works for files, so we don't need to special case them
-    let files = WalkDir::new(path.clone()).into_iter();
-    // flatten the directory structure into a list of (name, path) pairs.
-    // ignore symlinks.
-    let data_sources: Vec<(String, PathBuf)> = files
-        .map(|entry| {
-            let entry = entry.unwrap();
-            if !entry.file_type().is_file() {
-                // Skip symlinks. Directories are handled by WalkDir.
-                return Ok(None);
-            }
-            let path = entry.into_path();
-            let relative = path
-                .strip_prefix(root)
-                .map_err(|err| AppError::PathError(err.to_string()))?;
-            let name = canonicalized_path_to_string(relative, true)
-                .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?;
-            Ok(Some((name, path)))
-        })
-        .filter_map(Result::transpose)
-        .collect::<Result<Vec<_>, AppError>>()?;
-    let (send, recv) = async_channel::bounded(32);
-    let progress = iroh_blobs::util::progress::AsyncChannelProgressSender::new(send);
-    let show_progress = tokio::spawn(show_ingest_progress(recv));
-    // import all the files, using num_cpus workers, return names and temp tags
-    let mut names_and_tags = futures_lite::stream::iter(data_sources)
-        .map(|(name, path)| {
-            let db = db.clone();
-            let progress = progress.clone();
-            async move {
-                let (temp_tag, file_size) = db
-                    .import_file(path, ImportMode::TryReference, BlobFormat::Raw, progress)
-                    .await
-                    .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?;
-                Ok((name, temp_tag, file_size))
-            }
-        })
-        .buffered_unordered(num_cpus::get())
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, AppError>>()?;
-    drop(progress);
-    names_and_tags.sort_by(|(a, _, _), (b, _, _)| a.cmp(b));
-    // total size of all files
-    let size = names_and_tags.iter().map(|(_, _, size)| *size).sum::<u64>();
-    // collect the (name, hash) tuples into a collection
-    // we must also keep the tags around so the data does not get gced.
-    let (collection, tags) = names_and_tags
-        .into_iter()
-        .map(|(name, tag, _)| ((name, *tag.hash()), tag))
-        .unzip::<_, _, Collection, Vec<_>>();
-    let temp_tag = collection
-        .clone()
-        .store(&db)
-        .await
-        .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?;
-    // now that the collection is stored, we can drop the tags
-    // data is protected by the collection
-    drop(tags);
-    show_progress
-        .await
-        .map_err(|err| AppError::JoinHandleError(err.to_string()))??;
-    Ok((temp_tag, size, collection))
 }
 
 fn validate_path_component(_component: &str) -> Result<(), AppError> {

@@ -1,4 +1,5 @@
 use clap::Parser;
+use horizon_core::errors::AppError;
 
 pub mod cli;
 pub mod common;
@@ -7,7 +8,6 @@ pub mod receive;
 pub mod send;
 
 use crate::cli::Cli;
-use crate::error::AppError;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {

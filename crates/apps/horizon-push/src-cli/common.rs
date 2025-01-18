@@ -2,6 +2,7 @@ use clap::Parser;
 use console::style;
 use futures_buffered::BufferedStreamExt;
 use futures_lite::{future::Boxed, StreamExt};
+use horizon_core::errors::AppError;
 use indicatif::{
     HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle,
 };
@@ -25,7 +26,7 @@ use std::{
 };
 use walkdir::WalkDir;
 
-use crate::error::AppError;
+// use crate::error::AppError;
 
 /// Available command line options for configuring relays.
 #[derive(Clone, Debug)]

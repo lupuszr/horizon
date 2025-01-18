@@ -1,4 +1,5 @@
 use data_encoding::HEXLOWER;
+use horizon_core::errors::AppError;
 use indicatif::HumanBytes;
 use rand::Rng;
 // use anyhow::Result;
@@ -11,10 +12,7 @@ use iroh_blobs::{
 use clap::Args;
 use tokio::sync::mpsc;
 
-use crate::{
-    common::{import, CommonArgs, SendStatus},
-    error::AppError,
-};
+use crate::common::{import, CommonArgs, SendStatus};
 use std::{fs, path::PathBuf};
 
 #[derive(Debug, Args)]
@@ -70,7 +68,7 @@ impl HorizonPushSend {
         let hash = *temp_tag.hash();
 
         // make a ticket
-        let mut addr = router
+        let addr = router
             .endpoint()
             .node_addr()
             .await

@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use cid::Cid;
-use futures::AsyncWriteExt;
 use horizon_core::{ContentId, StreamingError};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -216,9 +215,12 @@ mod tests {
             todo!()
         }
         async fn retrieve(&self, cid: &str) -> Result<Vec<u8>, StorageError> {
-            self.data.read().await.get(cid).cloned().ok_or(
-                horizon_storage::StorageError::NotFound(cid.to_string()),
-            )
+            self.data
+                .read()
+                .await
+                .get(cid)
+                .cloned()
+                .ok_or(horizon_storage::StorageError::NotFound(cid.to_string()))
         }
 
         // Implement other required methods...
@@ -242,7 +244,7 @@ mod tests {
         let cid = CidStreaming::create_content_cid(data).unwrap();
 
         // Test different encodings
-        let base32 = cid.to_base32();
+        let _base32 = cid.to_base32();
         let base58 = cid.to_base58();
         let bytes = cid.to_bytes();
 
