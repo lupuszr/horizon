@@ -11,6 +11,12 @@ pub enum AppError {
     #[error("Iroh Router error: {0}")]
     IrohRouterError(String),
 
+    #[error("Iroh Stream error: {0}")]
+    IrohStreamError(String),
+
+    #[error("Iroh Download Progress error: {0}")]
+    IrohDownloadProgressError(String),
+
     #[error("Iroh Blob path error: {0}")]
     IrohBlobPathError(String),
 
@@ -31,6 +37,12 @@ pub enum AppError {
 
     #[error("Iroh Blob download error: {0}")]
     IrohBlobDownloadError(String),
+
+    #[error("Iroh Blob export error: {0}")]
+    IrohBlobExportError(String),
+
+    #[error("Iroh Blob export progress error: {0}")]
+    IrohBlobExportProgressError(String),
 
     #[error("Iroh Blob read error: {0}")]
     IrohBlobReadError(String),

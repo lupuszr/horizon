@@ -6,7 +6,7 @@ use indicatif::{
     HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle,
 };
 
-use iroh::{RelayMap, RelayMode, RelayUrl};
+use iroh::{Endpoint, RelayMap, RelayMode, RelayUrl};
 use iroh_base::SecretKey;
 use iroh_blobs::{
     format::collection::Collection,

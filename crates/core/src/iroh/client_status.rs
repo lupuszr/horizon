@@ -16,6 +16,28 @@ pub struct EventStats {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct ReceiveEventStats {
+    pub duration: Duration,
+    pub throughput: u64,
+    pub bytes_read: u64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum ReceiveProgressType {
+    Download,
+    Export,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiveProgress {
+    pub blob_number: u64,
+    pub offset: u64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum HorizonChannel {
     IrohIndexingEvent {
         status: String,
@@ -28,7 +50,20 @@ pub enum HorizonChannel {
         hash: Option<Hash>,
         stats: Option<EventStats>,
     },
+    IrohReceiverEvent {
+        status: String,
+        info: Option<String>,
+        hash: Option<Hash>,
+        progress: Option<ReceiveProgress>,
+        stats: Option<ReceiveEventStats>,
+    },
     IrohTicket(String),
+}
+
+pub async fn send_horizon_event(tx: mpsc::Sender<HorizonChannel>, event: HorizonChannel) {
+    if let Err(e) = tx.send(event.clone()).await {
+        eprintln!("Failed to send horizon event {:?} \n with error {e}", event);
+    };
 }
 
 #[derive(Debug, Clone)]
