@@ -3,6 +3,7 @@ use horizon_core::{
     iroh::{
         client_status::HorizonChannel,
         common::{CommonArgs, IrohState},
+        send::index_and_expose,
     },
 };
 use iroh_blobs::ticket::BlobTicket;
@@ -124,58 +125,8 @@ impl HorizonPushSend {
     ) -> Result<bool, AppError> {
         let Self { path, .. } = self;
 
-        let iroh = state.iroh.clone();
-        let blobs = iroh.clone().blobs;
-        let router = iroh.clone().router;
-        // let blobs_store = iroh.clone().blobs_store;
-        state
-            .sender
-            .send(HorizonChannel::IrohIndexingEvent {
-                status: "IndexingStarted".to_string(),
-                path: path.clone(),
-                hash: None,
-            })
-            .await
-            .map_err(|err| AppError::InternalChannelError(err.to_string()))?;
-
-        let blob = blobs
-            .add_from_path(
-                path.clone(),
-                false,
-                iroh_blobs::util::SetTagOption::Auto,
-                iroh_blobs::rpc::client::blobs::WrapOption::NoWrap,
-            )
-            .await
-            .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?
-            .finish()
-            .await
-            .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?;
-
-        // let outcome: iroh_blobs::rpc::client::blobs::AddOutcome = import_progress
-        //     .await
-        //     .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?;
-
-        let hash = blob.hash;
-
-        state
-            .sender
-            .send(HorizonChannel::IrohIndexingEvent {
-                status: "IndexingCompleted".to_string(),
-                path: path.clone(),
-                hash: Some(hash.clone()),
-            })
-            .await
-            .map_err(|err| AppError::InternalChannelError(err.to_string()))?;
-
-        let addr = router
-            .endpoint()
-            .node_addr()
-            .await
-            .map_err(|err| AppError::IrohEndpointError(err.to_string()))?;
-
-        let ticket = BlobTicket::new(addr, hash, blob.format)
-            .map_err(|err| AppError::IrohBlobTicketCreationError(err.to_string()))?;
-
+        let ticket =
+            index_and_expose(state.iroh.clone(), path.clone(), state.sender.clone()).await?;
         println!("TICKET:: {:?}", ticket.clone());
 
         // Update state with the generated ticket
@@ -188,13 +139,6 @@ impl HorizonPushSend {
             "horizon-cli receive --url {ticket} --path {}",
             path.to_str().unwrap()
         );
-
-        // Notify listeners via the channel
-        state
-            .sender
-            .send(HorizonChannel::IrohTicket(ticket.to_string()))
-            .await
-            .map_err(|err| AppError::InternalChannelError(err.to_string()))?;
 
         // TODO; solve this
         tokio::signal::ctrl_c()

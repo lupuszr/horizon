@@ -59,6 +59,9 @@ pub enum AppError {
     #[error("Iroh connection error: {0}")]
     IrohEndpointConnectionError(String),
 
+    #[error("Iroh Horizon State setup error: {0}")]
+    IrohHorizonStateSetupError(String),
+
     #[error("IO signal error: {0}")]
     IOSignalError(String),
 

@@ -11,6 +11,9 @@ use std::{path::PathBuf, str::FromStr};
 
 #[derive(Debug, Args)]
 pub struct HorizonPushReceive {
+    #[clap(short, long, default_value = None)]
+    pub base_path: Option<PathBuf>,
+
     #[clap(short, long, required(true))]
     pub path: PathBuf,
 
@@ -23,16 +26,26 @@ pub struct HorizonPushReceive {
 
 impl HorizonPushReceive {
     pub async fn eval(self, sender: mpsc::Sender<HorizonChannel>) -> Result<bool, AppError> {
-        let Self { path, url, .. } = self;
+        let Self {
+            path,
+            url,
+            base_path,
+            ..
+        } = self;
 
-        let mut iroh_base_path = dirs_next::home_dir().ok_or(AppError::InternalStateError(
-            "Could not determine home folder".to_string(),
-        ))?;
+        let iroh_base_path = if base_path.is_none() {
+            let mut ph = dirs_next::home_dir().ok_or(AppError::InternalStateError(
+                "Could not determine home folder".to_string(),
+            ))?;
+            ph.push(".horizon-push-receiver");
+            ph
+        } else {
+            base_path.unwrap()
+        };
 
-        iroh_base_path.push(".horizon-push-receive");
         let iroh_state = IrohState::new(iroh_base_path.clone(), sender.clone())
             .await
-            .unwrap();
+            .map_err(|err| AppError::IrohHorizonStateSetupError(err.to_string()))?;
 
         println!("Indexing file.");
 

@@ -1,5 +1,8 @@
 use data_encoding::HEXLOWER;
-use horizon_core::errors::AppError;
+use horizon_core::{
+    errors::AppError,
+    iroh::{client_status::HorizonChannel, common::IrohState, send::index_and_expose},
+};
 use indicatif::HumanBytes;
 use rand::Rng;
 // use anyhow::Result;
@@ -17,87 +20,40 @@ use std::{fs, path::PathBuf};
 
 #[derive(Debug, Args)]
 pub struct HorizonPushSend {
-    #[clap(short, long, default_value = "content")]
+    #[clap(short, long, required(true))]
     pub path: PathBuf,
+
+    #[clap(short, long, default_value = None)]
+    pub base_path: Option<PathBuf>,
 
     #[clap(flatten)]
     pub common: CommonArgs,
 }
 
 impl HorizonPushSend {
-    pub async fn eval(self, sender: mpsc::Sender<String>) -> Result<bool, AppError> {
-        let Self { path, common } = self;
-        // TODO: extract and use a custom discovey node
-        let endpoint = Endpoint::builder()
-            .discovery_n0()
-            .bind()
+    pub async fn eval(self, sender: mpsc::Sender<HorizonChannel>) -> Result<bool, AppError> {
+        let Self {
+            path, base_path, ..
+        } = self;
+
+        let iroh_base_path = if base_path.is_none() {
+            let mut ph = dirs_next::home_dir().ok_or(AppError::InternalStateError(
+                "Could not determine home folder".to_string(),
+            ))?;
+            ph.push(".horizon-push-sender");
+            ph
+        } else {
+            base_path.unwrap()
+        };
+
+        let iroh_state = IrohState::new(iroh_base_path.clone(), sender.clone())
             .await
-            .map_err(|e| AppError::IrohEndpointError(e.to_string()))?;
+            .map_err(|err| AppError::IrohHorizonStateSetupError(err.to_string()))?;
 
-        let suffix = rand::thread_rng().gen::<[u8; 16]>();
-        let cwd = std::env::current_dir().unwrap();
-        let blobs_data_dir = cwd.join(format!(".horizon-push-{}", HEXLOWER.encode(&suffix)));
-        if blobs_data_dir.exists() {
-            println!(
-                "can not share twice from the same directory: {}",
-                cwd.display(),
-            );
-            std::process::exit(1);
-        }
-
-        // We initialize the Blobs protocol in-memory
-        let local_pool = LocalPool::default();
-        let ps = SendStatus::new();
-        let blobs = Blobs::persistent(&blobs_data_dir)
-            .await
-            .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?
-            .events(ps.new_client().into())
-            .build(local_pool.handle(), &endpoint);
-
-        // Now we build a router that accepts blobs connections & routes them
-        // to the blobs protocol.
-        let router = Router::builder(endpoint)
-            .accept(iroh_blobs::ALPN, blobs.clone())
-            .spawn()
-            .await
-            .map_err(|e| AppError::IrohRouterError(e.to_string()))?;
-
-        println!("Indexing file.");
-
-        let (temp_tag, size, collection) = import(path.clone(), blobs.store().clone()).await?;
-        let hash = *temp_tag.hash();
-
-        // make a ticket
-        let addr = router
-            .endpoint()
-            .node_addr()
-            .await
-            .map_err(|err| AppError::IrohEndpointError(err.to_string()))?;
-        // addr.apply_options(AddrInfoOptions::RelayAndAddresses);
-        let ticket = BlobTicket::new(addr, hash, BlobFormat::HashSeq)
-            .map_err(|err| AppError::IrohBlobTicketCreationError(err.to_string()))?;
-        let entry_type = if path.is_file() { "file" } else { "directory" };
-        println!(
-            "imported {} {}, {}, hash {}",
-            entry_type,
-            path.display(),
-            HumanBytes(size),
-            &hash.to_string()
-        );
-        if common.verbose > 0 {
-            for (name, hash) in collection.iter() {
-                println!("    {} {name}", hash.to_string());
-            }
-        }
-
-        drop(temp_tag);
-
-        // Send the ticket through the channel
-        sender.send(ticket.clone().to_string()).await.unwrap();
-
-        println!("File analyzed. Fetch this file by running:");
-
-        fs::write("ticket.horizon", ticket.clone().to_string()).unwrap();
+        let ticket = index_and_expose(iroh_state.clone(), path.clone(), sender.clone()).await?;
+        let mut ticket_path = iroh_base_path.clone();
+        ticket_path.push("ticket.horizon");
+        fs::write(ticket_path, ticket.clone().to_string()).unwrap();
         println!(
             "horizon-cli receive --url {ticket} --path {}",
             path.to_str().unwrap()
