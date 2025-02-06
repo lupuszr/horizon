@@ -34,7 +34,7 @@ multihash.workspace = true
 multibase.workspace = true
 
 
-iroh = { workspace = true }
+iroh = { workspace = true, features = ["discovery-local-network"] }
 iroh-base = { workspace = true }
 quic-rpc = { workspace = true }
 iroh-docs = { workspace = true }
@@ -62,7 +62,7 @@ rand = { workspace = true }# Utilities
 
 bytes = "1.5"
 base64 = "0.21"
-tempfile = "3.10"
+tempfile = { workspace = true }
 
 num_cpus = { workspace = true }
 
