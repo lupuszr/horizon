@@ -32,6 +32,14 @@ cid.workspace = true
 multihash.workspace = true
 multibase.workspace = true
 
+# tuntimes
+deno_core = { workspace = true }
+deno_error = { workspace = true }
+wasmtime = { workspace = true }
+
+
+tempfile = { workspace = true }
+dirs-next = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

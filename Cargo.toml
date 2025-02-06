@@ -108,8 +108,14 @@ dirs-next = "2.0.0"
 
 uuid = { version = "1.7", features = ["v4", "serde"] }
 
+
+# runtimes for plugins
+deno_core = "0.331.0"
+deno_error = { version = "0.5.5", features = ["serde_json", "serde", "url", "tokio"] }
+wasmtime = "29.0.0"
+
 # [workspace.dev-dependencies]
 # tokio-test = "0.4"
 # mockall = "0.12"
 # wiremock = "0.5"
-# tempfile = "3.9"
+tempfile = "3.9"
