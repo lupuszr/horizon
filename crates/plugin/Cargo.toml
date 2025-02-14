@@ -41,5 +41,9 @@ wasmtime = { workspace = true }
 tempfile = { workspace = true }
 dirs-next = { workspace = true }
 
+# Local crates
+horizon-core = { path = "../../crates/core" }
+
 [dev-dependencies]
+wabt = "0.10.0"
 tokio-test = { workspace = true }

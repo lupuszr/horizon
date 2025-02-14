@@ -1,9 +1,17 @@
-use deno_core::{op2, Extension, JsRuntime, OpDecl, RuntimeOptions}; // For JavaScript
+// use deno_core::{op2, Extension, JsRuntime, OpDecl, RuntimeOptions}; // For JavaScript
+// use serde::{Deserialize, Serialize};
+// use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
+// use thiserror::Error;
+// use tokio::sync::{Mutex, RwLock};
+// use wasmtime::{Caller, Engine, Linker, Module, Store}; // For WASM
+
+use deno_core::{op2, Extension, JsRuntime, OpDecl, RuntimeOptions};
+use horizon_core::event::HorizonChannel;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::sync::{Mutex, RwLock};
-use wasmtime::{Caller, Engine, Linker, Module, Store}; // For WASM
+use wasmtime::{Caller, Engine, Func, Instance, Linker, Module, Store};
 
 #[derive(Debug, Deserialize)]
 pub struct Plugin {
@@ -16,7 +24,6 @@ pub struct Plugin {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum PluginType {
-    JavaScript,
     Wasm,
 }
 
@@ -51,7 +58,6 @@ pub enum PluginLoaderError {
 }
 
 enum LoadedPlugin {
-    JavaScript(Arc<Mutex<JsRuntime>>),
     Wasm(Module),
 }
 
@@ -69,61 +75,18 @@ impl PluginLoader {
         }
     }
 
-    // pub fn initialize_js_runtime(api: Arc<dyn HorizonPushAPI>) -> JsRuntime {
-    //     const DECL: OpDecl = op_sum();
-    //     let ext = Extension {
-    //         name: "my_ext",
-    //         ops: std::borrow::Cow::Borrowed(&[DECL]),
-    //         ..Default::default()
-    //     };
-
-    //     //       ::builder()
-    //     //     .ops(vec![
-    //     //         (
-    //     //             "op_log_event",
-    //     //             op_sync(move |_, args, _| {
-    //     //                 let message: String = args[0].as_str().unwrap().to_string();
-    //     //                 api.log_event(&message);
-    //     //                 Ok(())
-    //     //             }),
-    //     //         ),
-    //     //         (
-    //     //             "op_trigger_reload",
-    //     //             op_sync(move |_, _, _| {
-    //     //                 api.trigger_reload();
-    //     //                 Ok(())
-    //     //             }),
-    //     //         ),
-    //     //         (
-    //     //             "op_get_plugin_info",
-    //     //             op_sync(move |_, _, _| Ok(api.get_plugin_info())),
-    //     //         ),
-    //     //     ])
-    //     //     .build();
-
-    //     JsRuntime::new(RuntimeOptions {
-    //         extensions: vec![ext],
-    //         ..Default::default()
-    //     })
-
-    //     // todo!()
-    // }
     /// Load all plugins from a specified directory
     pub async fn load_plugins(&self, directory: &str) -> Result<(), PluginLoaderError> {
         let dir = PathBuf::from(directory);
         let mut plugins = self.plugins.write().await;
 
-        // Clear the existing plugins
         plugins.clear();
 
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
 
-            if path.is_file()
-                && (path.extension() == Some("js".as_ref())
-                    || path.extension() == Some("wasm".as_ref()))
-            {
+            if path.is_file() && path.extension() == Some("wasm".as_ref()) {
                 let manifest_path = path.with_extension("json");
                 if manifest_path.exists() {
                     let manifest_content =
@@ -142,21 +105,6 @@ impl PluginLoader {
                         })?;
 
                     let loaded_plugin = match plugin.plugin_type {
-                        PluginType::JavaScript => {
-                            let mut runtime = JsRuntime::new(RuntimeOptions::default());
-                            let js_code = fs::read_to_string(&path).map_err(|err| {
-                                PluginLoaderError::ReadManifestError {
-                                    path: path.clone(),
-                                    source: err,
-                                }
-                            })?;
-                            runtime
-                                .execute_script("plugin.js", js_code)
-                                .map_err(|err| {
-                                    PluginLoaderError::JavaScriptExecutionError(err.into())
-                                })?;
-                            LoadedPlugin::JavaScript(Arc::new(Mutex::new(runtime)))
-                        }
                         PluginType::Wasm => {
                             let module =
                                 Module::from_file(&self.wasm_engine, &path).map_err(|err| {
@@ -176,7 +124,6 @@ impl PluginLoader {
 
     /// Reload all plugins from the directory (safe for concurrency)
     pub async fn reload_plugins(&self, directory: &str) -> Result<(), PluginLoaderError> {
-        // Lock for writing to ensure no reads or writes happen while reloading
         self.load_plugins(directory).await
     }
 
@@ -187,245 +134,166 @@ impl PluginLoader {
         event: &str,
     ) -> Result<(), PluginLoaderError> {
         println!("dispatch from plugin: {}", plugin_name);
-        let plugins = self.plugins.read().await; // Concurrent reads
+        let plugins = self.plugins.read().await;
 
         let (plugin, loaded_plugin) = plugins
             .get(plugin_name)
             .ok_or_else(|| PluginLoaderError::PluginNotFound(plugin_name.to_string()))?;
 
         match loaded_plugin {
-            LoadedPlugin::JavaScript(runtime) => {
-                let event_script = format!("handleEvent('{}');", event);
-                runtime
-                    .lock()
-                    .await
-                    .execute_script("event.js", event_script)
-                    .map_err(|err| PluginLoaderError::JavaScriptExecutionError(err.into()))?;
-                Ok(())
-            }
             LoadedPlugin::Wasm(module) => {
                 let engine = self.wasm_engine.clone();
-                let mut linker = Linker::new(&engine);
-                linker.func_wrap(
-                    "host",
-                    "host_func",
-                    |caller: Caller<'_, u32>, param: i32| {
-                        println!("Got {} from WebAssembly", param);
-                        println!("my host state is: {}", caller.data());
-                    },
-                )?;
+                let mut store = Store::new(&engine, ()); // Empty store data
+                let instance = Instance::new(&mut store, module, &[])
+                    .map_err(|err| PluginLoaderError::WasmExecutionError(err.to_string()))?;
 
-                // let mut store = Store::new(&self.wasm_engine, event.to_string());
-                // let instance = wasmtime::Instance::new(&mut store, module, &[])
-                //     .map_err(|err| PluginLoaderError::WasmExecutionError(err.to_string()))?;
-                // let func = instance
-                //     .get_func(&mut store, "handle_event")
-                //     .ok_or_else(|| {
-                //         PluginLoaderError::WasmExecutionError(
-                //             "Missing 'handle_event' function".to_string(),
-                //         )
-                //     })?;
-                // let handle_event = func.typed::<(), (), _>(&store)?;
-                // handle_event
-                //     .call(&mut store, ())
-                //     .map_err(|err| PluginLoaderError::WasmExecutionError(err.to_string()))?;
-                // Ok(())
-                todo!()
+                let handle_event_func = instance.get_func(&mut store, "handle_event");
+
+                if let Some(func) = handle_event_func {
+                    // here we define the types of the wasm handle_event
+                    // TODO: right now the types are i32 -> i32 fix that
+                    let typed_func = func.typed::<i32, i32>(&store).map_err(|e| {
+                        PluginLoaderError::WasmExecutionError(format!(
+                            "Error getting typed function: {}",
+                            e
+                        ))
+                    })?;
+
+                    // invoke the wasm method
+                    let result = typed_func
+                        .call(&mut store, event.len() as i32) // Pass event length
+                        .map_err(|e| {
+                            PluginLoaderError::WasmExecutionError(format!(
+                                "Error calling function: {}",
+                                e
+                            ))
+                        })?;
+
+                    println!("WASM function returned: {}", result);
+                } else {
+                    return Err(PluginLoaderError::WasmExecutionError(
+                        "Missing 'handle_event' function".to_string(),
+                    ));
+                }
+
+                Ok(())
             }
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use std::fs::File;
-    use std::io::Write;
-    use tempfile::tempdir;
+mod plugin_tests {
     use tokio::runtime::Runtime;
+    use wabt::wat2wasm;
+    use wasmtime::Config;
 
-    fn create_test_plugin(directory: &str, name: &str, plugin_type: PluginType) -> PathBuf {
-        let manifest = json!({
-            "name": name,
-            "version": "1.0.0",
-            "description": "Test Plugin",
-            "plugin_type": plugin_type,
-            "entry_path": format!("{}/{}.js", directory, name),
-        });
-
-        let plugin_dir = PathBuf::from(directory);
-        let plugin_path = plugin_dir.join(format!("{}.js", name));
-        let manifest_path = plugin_dir.join(format!("{}.json", name));
-
-        // Create plugin directory
-        std::fs::create_dir_all(&plugin_dir).unwrap();
-
-        // Write the manifest file
-        let mut manifest_file = File::create(&manifest_path).unwrap();
-        manifest_file
-            .write_all(manifest.to_string().as_bytes())
-            .unwrap();
-
-        // Write a basic plugin script (empty for now)
-        let mut plugin_file = File::create(&plugin_path).unwrap();
-        plugin_file
-            .write_all(
-                b"console.log('Plugin Loaded');\n\
-            function handleEvent(event) {\n\
-              console.log('Event is: ', event)\n\
-            }",
-            )
-            .unwrap();
-
-        plugin_path
-    }
+    use super::*;
+    use std::io::Write; // For creating test files
 
     #[tokio::test]
-    async fn test_load_plugins() {
-        let dir = PathBuf::from("/tmp/testload_folder");
-        if dir.exists() {
-            fs::remove_dir_all(dir.clone()).unwrap();
-        }
-        if !dir.exists() {
-            fs::create_dir(&dir).unwrap();
-        }
-        // let dir = tempdir().unwrap();
-        let plugin_loader = PluginLoader::new();
+    async fn test_load_plugins() -> Result<(), PluginLoaderError> {
+        let loader = PluginLoader::new();
+        let temp_dir = tempfile::tempdir().unwrap(); // Create a temporary directory
 
-        // Create test plugins
-        create_test_plugin(dir.to_str().unwrap(), "plugin1", PluginType::JavaScript);
-        // create_test_plugin(dir.to_str().unwrap(), "plugin2", PluginType::Wasm);
+        // Create a dummy WASM file (replace with actual WASM if needed)
+        let wasm_path = temp_dir.path().join("test_plugin.wasm");
+        let mut wasm_file = fs::File::create(&wasm_path).unwrap();
+        wasm_file.write_all(b"\0asm\x01\0\0\0").unwrap(); // Minimal valid WASM header
 
-        // Load plugins
-        let result = plugin_loader.load_plugins(dir.to_str().unwrap()).await;
-        assert!(result.is_ok());
+        // Create a dummy manifest file
+        let manifest_path = temp_dir.path().join("test_plugin.json");
+        let manifest_content = r#"
+            {
+                "name": "TestPlugin",
+                "version": "1.0.0",
+                "description": "A test plugin",
+                "plugin_type": "Wasm",
+                "entry_path": "test_plugin.wasm"
+            }
+        "#;
+        fs::write(&manifest_path, manifest_content).unwrap();
 
-        // Check that the plugins are loaded correctly
-        let plugins = plugin_loader.plugins.read().await;
+        loader
+            .load_plugins(temp_dir.path().to_str().unwrap())
+            .await?;
+
+        let plugins = loader.plugins.read().await;
         assert_eq!(plugins.len(), 1);
-        assert!(plugins.contains_key("plugin1"));
-        // assert!(plugins.contains_key("plugin2"));
+        assert!(plugins.contains_key("TestPlugin"));
+
+        temp_dir.close().unwrap(); // Clean up the temporary directory
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_dispatch_event_js_plugin() {
-        let dir = tempdir().unwrap();
-        let plugin_loader = PluginLoader::new();
+    async fn test_dispatch_event() -> Result<(), PluginLoaderError> {
+        let loader = PluginLoader::new();
+        let temp_dir = tempfile::tempdir().unwrap();
 
-        // Create a JavaScript plugin
-        create_test_plugin(
-            dir.path().to_str().unwrap(),
-            "js_plugin",
-            PluginType::JavaScript,
-        );
+        // 1. Create a REAL WASM module with handle_event (using wat2wasm)
+        let wasm_wat = r#"
+            (module
+                (func $handle_event (param i32) (result i32)
+                    local.get 0
+                    i32.const 2
+                    i32.mul
+                )
+                (export "handle_event" (func $handle_event))
+            )
+        "#;
 
-        // Load plugins
-        let result = plugin_loader
-            .load_plugins(dir.path().to_str().unwrap())
-            .await;
+        let wasm_bytes = wat2wasm(wasm_wat.as_bytes()).unwrap();
+
+        let engine = Engine::new(&Config::default()).unwrap();
+        let module = Module::new(&engine, &wasm_bytes).unwrap();
+
+        let wasm_path = temp_dir.path().join("test_plugin.wasm");
+        let mut wasm_file = fs::File::create(&wasm_path).unwrap();
+        wasm_file.write_all(&wasm_bytes).unwrap();
+
+        // 2. Create the manifest file
+        let manifest_path = temp_dir.path().join("test_plugin.json");
+        let manifest_content = r#"
+            {
+                "name": "TestPlugin",
+                "version": "1.0.0",
+                "description": "A test plugin",
+                "plugin_type": "Wasm",
+                "entry_path": "test_plugin.wasm"
+            }
+        "#;
+        fs::write(&manifest_path, manifest_content).unwrap();
+
+        loader
+            .load_plugins(temp_dir.path().to_str().unwrap())
+            .await?;
+
+        // Optional: Compare the loaded module with the original module
+        let plugins = loader.plugins.read().await;
+        let (_, loaded_plugin) = plugins.get("TestPlugin").unwrap();
+
+        match loaded_plugin {
+            LoadedPlugin::Wasm(loaded_module) => {
+                let loaded_bytes = loaded_module.serialize().unwrap();
+                assert_eq!(wasm_bytes, loaded_bytes);
+            }
+        }
+
+        let result = loader.dispatch_event("TestPlugin", "test_event").await;
         assert!(result.is_ok());
+        // assert_eq!(result, Ok(())); // Check that dispatch was successful
 
-        // Dispatch an event
-        let result = plugin_loader
-            .dispatch_event("js_plugin", "test_event")
-            .await;
-        println!("res:: {:?}", result);
-        assert!(result.is_ok());
+        temp_dir.close().unwrap();
+        Ok(())
     }
 
-    //     #[tokio::test]
-    //     async fn test_dispatch_event_wasm_plugin() {
-    //         let dir = tempdir().unwrap();
-    //         let plugin_loader = PluginLoader::new();
-
-    //         // Create a WASM plugin (using an empty .wasm file for testing)
-    //         let plugin_path = create_test_plugin(
-    //             dir.path().to_str().unwrap(),
-    //             "wasm_plugin",
-    //             PluginType::Wasm,
-    //         );
-    //         let wasm_file = File::create(plugin_path).unwrap();
-    //         wasm_file.sync_all().unwrap(); // Empty WASM file
-
-    //         // Load plugins
-    //         let result = plugin_loader
-    //             .load_plugins(dir.path().to_str().unwrap())
-    //             .await;
-    //         assert!(result.is_ok());
-
-    //         // Dispatch an event
-    //         let result = plugin_loader
-    //             .dispatch_event("wasm_plugin", "test_event")
-    //             .await;
-    //         assert!(result.is_err()); // Should fail since the wasm plugin is empty
-    //     }
-
-    //     #[tokio::test]
-    //     async fn test_plugin_not_found() {
-    //         let plugin_loader = PluginLoader::new();
-
-    //         // Try dispatching event for a non-existent plugin
-    //         let result = plugin_loader
-    //             .dispatch_event("non_existent_plugin", "test_event")
-    //             .await;
-    //         assert!(result.is_err());
-    //         if let Err(PluginLoaderError::PluginNotFound(name)) = result {
-    //             assert_eq!(name, "non_existent_plugin");
-    //         }
-    //     }
-
-    //     #[tokio::test]
-    //     async fn test_invalid_plugin_manifest() {
-    //         let dir = tempdir().unwrap();
-    //         let plugin_loader = PluginLoader::new();
-
-    //         // Create an invalid plugin manifest (missing required fields)
-    //         let invalid_manifest = json!({
-    //             "name": "invalid_plugin",
-    //             "version": "1.0.0",
-    //         });
-    //         let manifest_path = dir.path().join("invalid_plugin.json");
-    //         let mut file = File::create(&manifest_path).unwrap();
-    //         file.write_all(invalid_manifest.to_string().as_bytes())
-    //             .unwrap();
-
-    //         // Try loading plugins
-    //         let result = plugin_loader
-    //             .load_plugins(dir.path().to_str().unwrap())
-    //             .await;
-    //         assert!(result.is_err());
-    //         if let Err(PluginLoaderError::InvalidManifestFormat { path, .. }) = result {
-    //             assert_eq!(path, manifest_path);
-    //         }
-    //     }
-
-    //     #[tokio::test]
-    //     async fn test_plugin_type_mismatch() {
-    //         let dir = tempdir().unwrap();
-    //         let plugin_loader = PluginLoader::new();
-
-    //         // Create a JavaScript plugin
-    //         create_test_plugin(
-    //             dir.path().to_str().unwrap(),
-    //             "plugin_js",
-    //             PluginType::JavaScript,
-    //         );
-
-    //         // Load plugins
-    //         let result = plugin_loader
-    //             .load_plugins(dir.path().to_str().unwrap())
-    //             .await;
-    //         assert!(result.is_ok());
-
-    //         // Try dispatching a Wasm event on a JavaScript plugin
-    //         let result = plugin_loader
-    //             .dispatch_event("plugin_js", "test_event")
-    //             .await;
-    //         assert!(result.is_err());
-    //         if let Err(PluginLoaderError::PluginTypeMismatch { name, expected }) = result {
-    //             assert_eq!(name, "plugin_js");
-    //             assert_eq!(expected, PluginType::Wasm);
-    //         }
-    //     }
+    #[tokio::test]
+    async fn test_plugin_not_found() {
+        let loader = PluginLoader::new();
+        let result = loader
+            .dispatch_event("NonExistentPlugin", "test_event")
+            .await;
+        assert!(matches!(result, Err(PluginLoaderError::PluginNotFound(_))));
+    }
 }
