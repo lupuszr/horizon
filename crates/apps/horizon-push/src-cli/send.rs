@@ -1,7 +1,8 @@
 use data_encoding::HEXLOWER;
 use horizon_core::{
     errors::AppError,
-    iroh::{client_status::HorizonChannel, common::IrohState, send::index_and_expose},
+    event::HorizonChannel,
+    iroh::{common::IrohState, send::index_and_expose},
 };
 use indicatif::HumanBytes;
 use rand::Rng;

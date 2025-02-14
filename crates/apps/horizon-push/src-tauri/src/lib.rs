@@ -1,7 +1,7 @@
 use horizon_core::{
     errors::AppError,
+    event::HorizonChannel,
     iroh::{
-        client_status::HorizonChannel,
         common::{CommonArgs, IrohState},
         send::index_and_expose,
     },

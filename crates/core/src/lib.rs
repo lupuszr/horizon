@@ -4,6 +4,7 @@ use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
 
 pub mod errors;
+pub mod event;
 pub mod iroh;
 
 // TODO: deprecate this

@@ -1,6 +1,6 @@
-use horizon_core::errors::AppError;
+use horizon_core::iroh::common::IrohState;
 use horizon_core::iroh::receive::fetch_and_export;
-use horizon_core::iroh::{client_status::HorizonChannel, common::IrohState};
+use horizon_core::{errors::AppError, event::HorizonChannel};
 use iroh_blobs::ticket::BlobTicket;
 
 use clap::Args;

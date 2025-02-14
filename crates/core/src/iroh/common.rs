@@ -27,9 +27,9 @@ pub(crate) type BlobsClient = iroh_blobs::rpc::client::blobs::Client<
 pub(crate) type DocsClient = iroh_docs::rpc::client::docs::Client<
     FlumeConnector<iroh_docs::rpc::proto::Response, iroh_docs::rpc::proto::Request>,
 >;
-use crate::errors::AppError;
+use crate::{errors::AppError, event::HorizonChannel};
 
-use super::client_status::{HorizonChannel, IrohClientStatus};
+use super::client_status::IrohClientStatus;
 
 /// Available command line options for configuring relays.
 #[derive(Clone, Debug)]
