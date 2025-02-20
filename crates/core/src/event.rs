@@ -1,15 +1,15 @@
 use std::{path::PathBuf, time::Duration};
 
 use iroh_blobs::Hash;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EventStats {
     pub duration: Duration,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiveEventStats {
     pub duration: Duration,
@@ -17,21 +17,21 @@ pub struct ReceiveEventStats {
     pub bytes_read: u64,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum ReceiveProgressType {
     Download,
     Export,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiveProgress {
     pub blob_number: u64,
     pub offset: u64,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum HorizonChannel {
     IrohIndexingEvent {

@@ -70,3 +70,9 @@ Cargo.lock
 *.mov
 *.avi
 *.mkv
+
+node_modules/
+**/node_modules/*
+
+// wasm wit
+*.wit

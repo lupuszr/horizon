@@ -36,6 +36,8 @@ multibase.workspace = true
 deno_core = { workspace = true }
 deno_error = { workspace = true }
 wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+wasmtime-wasi-http = "29.0.0"
 
 
 tempfile = { workspace = true }
