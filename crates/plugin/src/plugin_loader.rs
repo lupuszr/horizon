@@ -98,6 +98,13 @@ pub struct PluginLoader {
     wasm_engine: Engine,
 }
 
+fn type_annotate_wasi<T, F>(val: F) -> F
+where
+    F: Fn(&mut T) -> wasmtime_wasi::WasiImpl<&mut T>,
+{
+    val
+}
+
 impl PluginLoader {
     /// Create a new PluginLoader instance
     pub fn new() -> Self {
@@ -176,13 +183,6 @@ impl PluginLoader {
             .get(plugin_name)
             .ok_or_else(|| PluginLoaderError::PluginNotFound(plugin_name.to_string()))?;
 
-        let _event_type = match event {
-            HorizonChannel::IrohIndexingEvent { .. } => 0,
-            HorizonChannel::IrohSenderEvent { .. } => 1,
-            HorizonChannel::IrohReceiverEvent { .. } => 2,
-            HorizonChannel::IrohTicket(_) => 3,
-        };
-
         match loaded_plugin {
             LoadedPlugin::Wasm(component) => {
                 let event_json = serde_json::to_string(event).unwrap();
@@ -196,23 +196,64 @@ impl PluginLoader {
                     },
                 ); // Empty store data
                 let mut linker = Linker::<WasmState>::new(&self.wasm_engine);
-                // horizon::add_to_linker();
-                // wasmtime_wasi::add_to_linker_sync(&mut linker).unwrap();
+                let closure = type_annotate_wasi::<WasmState, _>(|t| wasmtime_wasi::WasiImpl(t));
+                wasmtime_wasi::bindings::cli::terminal_stdin::add_to_linker_get_host(
+                    &mut linker,
+                    closure,
+                )?;
+                wasmtime_wasi::bindings::cli::terminal_stdout::add_to_linker_get_host(
+                    &mut linker,
+                    closure,
+                )?;
+                wasmtime_wasi::bindings::cli::terminal_stderr::add_to_linker_get_host(
+                    &mut linker,
+                    closure,
+                )?;
+                wasmtime_wasi::bindings::cli::terminal_output::add_to_linker_get_host(
+                    &mut linker,
+                    closure,
+                )?;
+                wasmtime_wasi::bindings::cli::terminal_input::add_to_linker_get_host(
+                    &mut linker,
+                    closure,
+                )?;
+                wasmtime_wasi::bindings::sync::filesystem::types::add_to_linker_get_host(
+                    &mut linker,
+                    closure,
+                )?;
+                wasmtime_wasi::bindings::sync::filesystem::preopens::add_to_linker_get_host(
+                    &mut linker,
+                    closure,
+                )?;
+
+                // crate::bindings::clocks::monotonic_clock::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sync::filesystem::types::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::filesystem::preopens::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::io::error::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sync::io::poll::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sync::io::streams::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::random::random::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::random::insecure::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::random::insecure_seed::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::exit::add_to_linker_get_host(l, &options.into(), closure)?;
+                // crate::bindings::cli::environment::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::stdin::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::stdout::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::stderr::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::terminal_input::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::terminal_output::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::terminal_stdin::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::terminal_stdout::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::cli::terminal_stderr::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sync::sockets::tcp::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sockets::tcp_create_socket::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sync::sockets::udp::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sockets::udp_create_socket::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sockets::instance_network::add_to_linker_get_host(l, closure)?;
+                // crate::bindings::sockets::network::add_to_linker_get_host(l, &options.into(), closure)?;
+                // crate::bindings::sockets::ip_name_lookup::add_to_linker_get_host(l, closure)?;
                 // wasmtime_wasi_http::add_to_linker_sync(l)
-                //
-                // let closure = type_annotate_wasi::<WasmState, _>(|t| wasmtime_wasi::WasiImpl(t));
                 wasmtime_wasi_http::add_to_linker_sync(&mut linker).unwrap();
-                // wasmtime_wasi::bindings::clocks::wall_clock::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi::bindings::clocks::monotonic_clock::add_to_linker_get_host(
-                //     l, closure,
-                // )?;
-                // wasmtime_wasi::bindings::sync::io::poll::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi::bindings::sync::io::streams::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi::bindings::io::error::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi::bindings::cli::stdin::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi::bindings::cli::stdout::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi::bindings::cli::stderr::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi::bindings::random::random::add_to_linker_get_host(l, closure)?;
 
                 // linker.define_unknown_imports_as_traps(component).unwrap();
                 let instance = linker
