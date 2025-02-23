@@ -2,8 +2,6 @@
 members = [
     # "crates/api",
     "crates/storage",
-    "crates/streaming",
-    # "crates/video",
     # "crates/auth",
     "crates/core",
     "crates/plugin",
