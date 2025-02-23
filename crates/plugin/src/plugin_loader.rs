@@ -4,13 +4,24 @@ use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::sync::RwLock;
 use wasmtime::{
-    component::{Component, Linker, Val},
+    component::{Component, Linker, Resource, Val},
     Config, Engine, Store,
 };
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView}; // Import spawn_blocking
 
-wasmtime::component::bindgen!("horizon");
+wasmtime::component::bindgen!({
+   world: "extension",
+   with: {
+           // Specify that our host resource is going to point to the `MyLogger`
+           // which is defined just below this macro.
+           "horizon:extension/network/document": HorizonDocument,
+    },
+    trappable_imports: true,
+    async: true
+});
+
+pub struct HorizonDocument {}
 
 #[derive(Debug, Deserialize)]
 pub struct Plugin {
@@ -47,10 +58,42 @@ impl WasiHttpView for WasmState {
     }
 }
 
-impl HorizonImports for WasmState {
-    fn handle(&mut self, input: String) -> String {
-        println!("Received:: {}", input);
-        input
+impl horizon::extension::network::Host for WasmState {}
+
+impl horizon::extension::network::HostDocument for WasmState {
+    async fn new(&mut self) -> wasmtime::Result<Resource<HorizonDocument>> {
+        let id = self.table.push(HorizonDocument {})?;
+        Ok(id)
+    }
+    async fn read_key(
+        &mut self,
+        document: Resource<HorizonDocument>,
+        key: String,
+    ) -> wasmtime::Result<Vec<u8>> {
+        debug_assert!(!document.owned());
+        println!("DODO");
+        return Ok(vec![1, 2]);
+    }
+    async fn add_key_value(
+        &mut self,
+        document: Resource<HorizonDocument>,
+        key: String,
+        value: Vec<u8>,
+    ) -> wasmtime::Result<()> {
+        todo!()
+    }
+    async fn drop(
+        &mut self,
+        rep: wasmtime::component::Resource<HorizonDocument>,
+    ) -> wasmtime::Result<()> {
+        Ok(())
+    }
+}
+
+impl horizon::extension::logger::Host for WasmState {
+    async fn log(&mut self, msg: String) -> wasmtime::Result<()> {
+        println!("extension log: {:?}", msg);
+        Ok(())
     }
 }
 
@@ -108,9 +151,22 @@ where
 impl PluginLoader {
     /// Create a new PluginLoader instance
     pub fn new() -> Self {
+        let mut config = Config::new();
+        config.async_support(true);
+        config.wasm_multi_memory(true);
+        config.wasm_component_model(true);
+        config
+            .debug_info(true)
+            .wasm_backtrace(true)
+            .coredump_on_trap(true)
+            .profiler(wasmtime::ProfilingStrategy::None)
+            .wasm_tail_call(true)
+            .wasm_function_references(true)
+            .wasm_gc(true);
+
         Self {
             plugins: Arc::new(RwLock::new(HashMap::new())),
-            wasm_engine: Engine::default(),
+            wasm_engine: Engine::new(&config).unwrap(),
         }
     }
 
@@ -119,8 +175,17 @@ impl PluginLoader {
         let dir = PathBuf::from(directory);
         println!("dir: {:?}", dir);
         let mut config = Config::new();
+        config.async_support(true);
         config.wasm_multi_memory(true);
         config.wasm_component_model(true);
+        config
+            .debug_info(true)
+            .wasm_backtrace(true)
+            .coredump_on_trap(true)
+            .profiler(wasmtime::ProfilingStrategy::None)
+            .wasm_tail_call(true)
+            .wasm_function_references(true)
+            .wasm_gc(true);
         let mut plugins = self.plugins.write().await;
 
         plugins.clear();
@@ -190,11 +255,15 @@ impl PluginLoader {
                 let mut store = Store::new(
                     &self.wasm_engine,
                     WasmState {
-                        ctx: WasiCtxBuilder::new().build(),
+                        ctx: WasiCtxBuilder::new()
+                            .inherit_stdio()
+                            .inherit_stderr()
+                            .build(),
                         table: ResourceTable::new(),
                         http_ctx: WasiHttpCtx::new(),
                     },
                 ); // Empty store data
+
                 let mut linker = Linker::<WasmState>::new(&self.wasm_engine);
                 let closure = type_annotate_wasi::<WasmState, _>(|t| wasmtime_wasi::WasiImpl(t));
                 wasmtime_wasi::bindings::cli::terminal_stdin::add_to_linker_get_host(
@@ -217,11 +286,11 @@ impl PluginLoader {
                     &mut linker,
                     closure,
                 )?;
-                wasmtime_wasi::bindings::sync::filesystem::types::add_to_linker_get_host(
+                wasmtime_wasi::bindings::filesystem::types::add_to_linker_get_host(
                     &mut linker,
                     closure,
                 )?;
-                wasmtime_wasi::bindings::sync::filesystem::preopens::add_to_linker_get_host(
+                wasmtime_wasi::bindings::filesystem::preopens::add_to_linker_get_host(
                     &mut linker,
                     closure,
                 )?;
@@ -253,11 +322,14 @@ impl PluginLoader {
                 // crate::bindings::sockets::network::add_to_linker_get_host(l, &options.into(), closure)?;
                 // crate::bindings::sockets::ip_name_lookup::add_to_linker_get_host(l, closure)?;
                 // wasmtime_wasi_http::add_to_linker_sync(l)
-                wasmtime_wasi_http::add_to_linker_sync(&mut linker).unwrap();
+                Extension::add_to_linker(&mut linker, |state: &mut WasmState| state)?;
+                // wasmtime_wasi::add_to_linker_async(&mut linker).unwrap();
+                wasmtime_wasi_http::add_to_linker_async(&mut linker).unwrap();
 
                 // linker.define_unknown_imports_as_traps(component).unwrap();
                 let instance = linker
-                    .instantiate(&mut store, component)
+                    .instantiate_async(&mut store, component)
+                    .await
                     .map_err(|err| PluginLoaderError::WasmExecutionError(err.to_string()))?;
 
                 let params = vec![Val::String(event_json.into())];
@@ -266,16 +338,21 @@ impl PluginLoader {
 
                 if let Some(func) = handle_event_func {
                     // here we define the types of the wasm handle_event
-                    // (i32, i32, i32) <=> (event_type, , len)
-                    match func.call(store, &params, &mut result) {
-                        Ok(_) => (),
+                    // (i32, i32, i32) <=> (event_type, , len)i
+                    // spawn_blocking(move || {
+                    match func.call_async(store, &params, &mut result).await {
+                        Ok(_) => {
+                            println!("Res is:: {:?}", result);
+
+                            ()
+                        }
                         Err(err) => {
                             println!("invoke error {:?}", err);
-                            todo!()
                         }
-                    };
+                    }
 
-                    println!("WASM function returned: {:?}", result);
+                    // .await
+                    // .unwrap(); // Handle errors
                 } else {
                     return Err(PluginLoaderError::WasmExecutionError(
                         "Missing 'handle_event' function".to_string(),
