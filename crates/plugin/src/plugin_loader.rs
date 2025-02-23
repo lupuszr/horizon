@@ -1,27 +1,19 @@
 use horizon_core::event::HorizonChannel;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
-use thiserror::Error;
 use tokio::sync::RwLock;
 use wasmtime::{
-    component::{Component, Linker, Resource, Val},
+    component::{Component, Linker, Val},
     Config, Engine, Store,
 };
-use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView}; // Import spawn_blocking
+use wasmtime_wasi::{ResourceTable, WasiCtxBuilder};
+use wasmtime_wasi_http::WasiHttpCtx;
 
-wasmtime::component::bindgen!({
-   world: "extension",
-   with: {
-           // Specify that our host resource is going to point to the `MyLogger`
-           // which is defined just below this macro.
-           "horizon:extension/network/document": HorizonDocument,
-    },
-    trappable_imports: true,
-    async: true
-});
-
-pub struct HorizonDocument {}
+use crate::{
+    errors::PluginLoaderError,
+    types::PluginType,
+    wasm_extension::{type_annotate_wasi, Extension, WasmState},
+}; // Import spawn_blocking
 
 #[derive(Debug, Deserialize)]
 pub struct Plugin {
@@ -32,106 +24,6 @@ pub struct Plugin {
     pub entry_path: PathBuf,
 }
 
-struct WasmState {
-    ctx: WasiCtx,
-    http_ctx: WasiHttpCtx,
-    table: ResourceTable,
-}
-
-impl WasiView for WasmState {
-    fn table(&mut self) -> &mut ResourceTable {
-        &mut self.table
-    }
-
-    fn ctx(&mut self) -> &mut WasiCtx {
-        &mut self.ctx
-    }
-}
-
-impl WasiHttpView for WasmState {
-    fn ctx(&mut self) -> &mut wasmtime_wasi_http::WasiHttpCtx {
-        &mut self.http_ctx
-    }
-
-    fn table(&mut self) -> &mut ResourceTable {
-        &mut self.table
-    }
-}
-
-impl horizon::extension::network::Host for WasmState {}
-
-impl horizon::extension::network::HostDocument for WasmState {
-    async fn new(&mut self) -> wasmtime::Result<Resource<HorizonDocument>> {
-        let id = self.table.push(HorizonDocument {})?;
-        Ok(id)
-    }
-    async fn read_key(
-        &mut self,
-        document: Resource<HorizonDocument>,
-        key: String,
-    ) -> wasmtime::Result<Vec<u8>> {
-        debug_assert!(!document.owned());
-        println!("DODO");
-        return Ok(vec![1, 2]);
-    }
-    async fn add_key_value(
-        &mut self,
-        document: Resource<HorizonDocument>,
-        key: String,
-        value: Vec<u8>,
-    ) -> wasmtime::Result<()> {
-        todo!()
-    }
-    async fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<HorizonDocument>,
-    ) -> wasmtime::Result<()> {
-        Ok(())
-    }
-}
-
-impl horizon::extension::logger::Host for WasmState {
-    async fn log(&mut self, msg: String) -> wasmtime::Result<()> {
-        println!("extension log: {:?}", msg);
-        Ok(())
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub enum PluginType {
-    Wasm,
-}
-
-#[derive(Debug, Error)]
-pub enum PluginLoaderError {
-    #[error("Failed to read the plugin directory: {0}")]
-    ReadDirError(#[from] std::io::Error),
-
-    #[error("Failed to read manifest for plugin {path:?}: {source}")]
-    ReadManifestError {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-
-    #[error("Invalid plugin manifest format for {path:?}: {source}")]
-    InvalidManifestFormat {
-        path: PathBuf,
-        source: serde_json::Error,
-    },
-
-    #[error("Plugin '{0}' not found")]
-    PluginNotFound(String),
-
-    #[error("Plugin '{name}' is not of the expected type: {expected:?}")]
-    PluginTypeMismatch { name: String, expected: PluginType },
-
-    #[error("Failed to execute JavaScript plugin: {0}")]
-    JavaScriptExecutionError(#[from] deno_core::error::AnyError),
-
-    #[error("Failed to load or execute WASM plugin: {0}")]
-    WasmExecutionError(String),
-}
-
 enum LoadedPlugin {
     Wasm(Component),
 }
@@ -139,13 +31,6 @@ enum LoadedPlugin {
 pub struct PluginLoader {
     plugins: Arc<RwLock<HashMap<String, (Plugin, LoadedPlugin)>>>,
     wasm_engine: Engine,
-}
-
-fn type_annotate_wasi<T, F>(val: F) -> F
-where
-    F: Fn(&mut T) -> wasmtime_wasi::WasiImpl<&mut T>,
-{
-    val
 }
 
 impl PluginLoader {
@@ -173,19 +58,7 @@ impl PluginLoader {
     /// Load all plugins from a specified directory
     pub async fn load_plugins(&self, directory: &str) -> Result<(), PluginLoaderError> {
         let dir = PathBuf::from(directory);
-        println!("dir: {:?}", dir);
-        let mut config = Config::new();
-        config.async_support(true);
-        config.wasm_multi_memory(true);
-        config.wasm_component_model(true);
-        config
-            .debug_info(true)
-            .wasm_backtrace(true)
-            .coredump_on_trap(true)
-            .profiler(wasmtime::ProfilingStrategy::None)
-            .wasm_tail_call(true)
-            .wasm_function_references(true)
-            .wasm_gc(true);
+
         let mut plugins = self.plugins.write().await;
 
         plugins.clear();
@@ -262,8 +135,7 @@ impl PluginLoader {
                         table: ResourceTable::new(),
                         http_ctx: WasiHttpCtx::new(),
                     },
-                ); // Empty store data
-
+                );
                 let mut linker = Linker::<WasmState>::new(&self.wasm_engine);
                 let closure = type_annotate_wasi::<WasmState, _>(|t| wasmtime_wasi::WasiImpl(t));
                 wasmtime_wasi::bindings::cli::terminal_stdin::add_to_linker_get_host(
@@ -295,33 +167,6 @@ impl PluginLoader {
                     closure,
                 )?;
 
-                // crate::bindings::clocks::monotonic_clock::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sync::filesystem::types::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::filesystem::preopens::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::io::error::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sync::io::poll::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sync::io::streams::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::random::random::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::random::insecure::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::random::insecure_seed::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::exit::add_to_linker_get_host(l, &options.into(), closure)?;
-                // crate::bindings::cli::environment::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::stdin::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::stdout::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::stderr::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::terminal_input::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::terminal_output::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::terminal_stdin::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::terminal_stdout::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::cli::terminal_stderr::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sync::sockets::tcp::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sockets::tcp_create_socket::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sync::sockets::udp::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sockets::udp_create_socket::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sockets::instance_network::add_to_linker_get_host(l, closure)?;
-                // crate::bindings::sockets::network::add_to_linker_get_host(l, &options.into(), closure)?;
-                // crate::bindings::sockets::ip_name_lookup::add_to_linker_get_host(l, closure)?;
-                // wasmtime_wasi_http::add_to_linker_sync(l)
                 Extension::add_to_linker(&mut linker, |state: &mut WasmState| state)?;
                 // wasmtime_wasi::add_to_linker_async(&mut linker).unwrap();
                 wasmtime_wasi_http::add_to_linker_async(&mut linker).unwrap();
@@ -339,7 +184,6 @@ impl PluginLoader {
                 if let Some(func) = handle_event_func {
                     // here we define the types of the wasm handle_event
                     // (i32, i32, i32) <=> (event_type, , len)i
-                    // spawn_blocking(move || {
                     match func.call_async(store, &params, &mut result).await {
                         Ok(_) => {
                             println!("Res is:: {:?}", result);
@@ -350,9 +194,6 @@ impl PluginLoader {
                             println!("invoke error {:?}", err);
                         }
                     }
-
-                    // .await
-                    // .unwrap(); // Handle errors
                 } else {
                     return Err(PluginLoaderError::WasmExecutionError(
                         "Missing 'handle_event' function".to_string(),
@@ -438,75 +279,4 @@ mod plugin_tests {
 
         Ok(())
     }
-
-    // #[tokio::test]
-    // async fn test_dispatch_event() -> Result<(), PluginLoaderError> {
-    //     let loader = PluginLoader::new();
-    //     let temp_dir = tempfile::tempdir().unwrap();
-
-    //     // 1. Create a REAL WASM module with handle_event (using wat2wasm)
-    //     let wasm_wat = r#"
-    //         (module
-    //             (func $handle_event (param i32) (result i32)
-    //                 local.get 0
-    //                 i32.const 2
-    //                 i32.mul
-    //             )
-    //             (export "handle_event" (func $handle_event))
-    //         )
-    //     "#;
-
-    //     let wasm_bytes = wat2wasm(wasm_wat.as_bytes()).unwrap();
-
-    //     let engine = Engine::new(&Config::default()).unwrap();
-    //     let module = Module::new(&engine, &wasm_bytes).unwrap();
-
-    //     let wasm_path = temp_dir.path().join("test_plugin.wasm");
-    //     let mut wasm_file = fs::File::create(&wasm_path).unwrap();
-    //     wasm_file.write_all(&wasm_bytes).unwrap();
-
-    //     // 2. Create the manifest file
-    //     let manifest_path = temp_dir.path().join("test_plugin.json");
-    //     let manifest_content = r#"
-    //         {
-    //             "name": "TestPlugin",
-    //             "version": "1.0.0",
-    //             "description": "A test plugin",
-    //             "plugin_type": "Wasm",
-    //             "entry_path": "test_plugin.wasm"
-    //         }
-    //     "#;
-    //     fs::write(&manifest_path, manifest_content).unwrap();
-
-    //     loader
-    //         .load_plugins(temp_dir.path().to_str().unwrap())
-    //         .await?;
-
-    //     // Optional: Compare the loaded module with the original module
-    //     let plugins = loader.plugins.read().await;
-    //     let (_, loaded_plugin) = plugins.get("TestPlugin").unwrap();
-
-    //     match loaded_plugin {
-    //         LoadedPlugin::Wasm(loaded_module) => {
-    //             let loaded_bytes = loaded_module.serialize().unwrap();
-    //             assert_eq!(wasm_bytes, loaded_bytes);
-    //         }
-    //     }
-
-    //     let result = loader.dispatch_event("TestPlugin", "test_event").await;
-    //     assert!(result.is_ok());
-    //     // assert_eq!(result, Ok(())); // Check that dispatch was successful
-
-    //     temp_dir.close().unwrap();
-    //     Ok(())
-    // }
-
-    // #[tokio::test]
-    // async fn test_plugin_not_found() {
-    //     let loader = PluginLoader::new();
-    //     let result = loader
-    //         .dispatch_event("NonExistentPlugin", "test_event")
-    //         .await;
-    //     assert!(matches!(result, Err(PluginLoaderError::PluginNotFound(_))));
-    // }
 }
