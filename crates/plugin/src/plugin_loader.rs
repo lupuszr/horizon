@@ -1,4 +1,4 @@
-use horizon_core::event::HorizonChannel;
+use horizon_core::{event::HorizonChannel, iroh::common::IrohState};
 use serde::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
@@ -31,11 +31,12 @@ enum LoadedPlugin {
 pub struct PluginLoader {
     plugins: Arc<RwLock<HashMap<String, (Plugin, LoadedPlugin)>>>,
     wasm_engine: Engine,
+    iroh_state: Arc<IrohState>,
 }
 
 impl PluginLoader {
     /// Create a new PluginLoader instance
-    pub fn new() -> Self {
+    pub fn new(iroh_state: Arc<IrohState>) -> Self {
         let mut config = Config::new();
         config.async_support(true);
         config.wasm_multi_memory(true);
@@ -52,6 +53,7 @@ impl PluginLoader {
         Self {
             plugins: Arc::new(RwLock::new(HashMap::new())),
             wasm_engine: Engine::new(&config).unwrap(),
+            iroh_state,
         }
     }
 
@@ -134,6 +136,7 @@ impl PluginLoader {
                             .build(),
                         table: ResourceTable::new(),
                         http_ctx: WasiHttpCtx::new(),
+                        iroh_state: self.iroh_state.clone(),
                     },
                 );
                 let mut linker = Linker::<WasmState>::new(&self.wasm_engine);
@@ -209,6 +212,8 @@ impl PluginLoader {
 #[cfg(test)]
 mod plugin_tests {
 
+    use tokio::sync::mpsc;
+
     use super::*;
     use std::env; // For creating test files
 
@@ -253,7 +258,13 @@ mod plugin_tests {
 
         println!("The current directory is {}", path.display());
         // 1. Setup: Create a PluginLoader instance
-        let plugin_loader = PluginLoader::new();
+        let mut iroh_base_path = dirs_next::home_dir().unwrap();
+        iroh_base_path.push(".horizon-wasmtest-dispatch");
+        let (tx_send, _rx_sender) = mpsc::channel(100);
+        let iroh_state = IrohState::new(iroh_base_path.clone(), tx_send.clone())
+            .await
+            .unwrap();
+        let plugin_loader = PluginLoader::new(Arc::new(iroh_state));
 
         // 2. Load Plugins (replace with your actual directory)
         path.push("test_plugins"); // Create a directory with test plugins

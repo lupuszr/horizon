@@ -3,11 +3,22 @@ package horizon:extension;
 interface logger {
     log: func(msg: string);
 }
+
 interface network {
+    record access {
+        read: string,
+        write: string,
+        document-id: string
+    }
+    record doc {
+        document-id: string
+    }
     resource document {
         constructor();
-        read-key: func (key: string) -> list<u8>;
-        add-key-value: func (key: string, value: list<u8>);
+        create: func() -> result<access>;
+        load: func(ticket: string) -> result<doc>;
+        read-key: func (document-id: string, key: string) -> list<u8>;
+        add-key-value: func (document-id: string, key: string, value: list<u8>);
     }
 }
 interface blob {
