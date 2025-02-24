@@ -1,0 +1,7 @@
+{
+  "name": "TestPlugin",
+  "version": "1.0.0",
+  "description": "A test plugin",
+  "plugin_type": "Wasm",
+  "entry_path": "test_plugin.wasm"
+}

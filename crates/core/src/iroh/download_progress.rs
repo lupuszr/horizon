@@ -14,10 +14,9 @@ use tokio::sync::mpsc;
 
 use crate::{
     errors::AppError,
-    iroh::client_status::{send_horizon_event, ReceiveEventStats, ReceiveProgress},
+    event::{HorizonChannel, ReceiveEventStats, ReceiveProgress},
+    iroh::client_status::send_horizon_event,
 };
-
-use super::client_status::HorizonChannel;
 
 /// Creates a [`ProgressBar`] with some defaults for the overall progress.
 fn make_overall_progress() -> ProgressBar {

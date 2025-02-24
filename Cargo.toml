@@ -2,15 +2,12 @@
 members = [
     # "crates/api",
     "crates/storage",
-    "crates/streaming",
-    # "crates/video",
     # "crates/auth",
     "crates/core",
     "crates/plugin",
     "crates/apps/horizon-push/src-tauri",
-    "crates/apps/horizon-push/src-cli"
-    # "examples/video_stream"
-]
+    "crates/apps/horizon-push/src-cli",
+    "crates/wasm_plugins/rust_example"]
 resolver = "2"
 
 [profile.dev]
@@ -34,6 +31,7 @@ authors = ["vikpelle@gmail.com"]
 [workspace.dependencies]
 # Async runtime and web framework
 tokio = { version = "1.36", features = ["full"] }
+# tokio = { version = "1.43", features = ["sync", "macros", "io-util", "rt", "time"] }
 axum = { version = "0.7", features = ["multipart"] }
 tower = "0.4"
 async-trait = "0.1.83"
@@ -108,8 +106,15 @@ dirs-next = "2.0.0"
 
 uuid = { version = "1.7", features = ["v4", "serde"] }
 
+
+# runtimes for plugins
+deno_core = "0.331.0"
+deno_error = { version = "0.5.5", features = ["serde_json", "serde", "url", "tokio"] }
+wasmtime = "29.0.1"
+wasmtime-wasi = "29.0.1"
+
 # [workspace.dev-dependencies]
 # tokio-test = "0.4"
 # mockall = "0.12"
 # wiremock = "0.5"
-# tempfile = "3.9"
+tempfile = "3.9"

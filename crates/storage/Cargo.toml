@@ -11,7 +11,7 @@ horizon-core = { path = "../core" }
 iroh.workspace = true
 
 # Async and utils
-tokio.workspace = true
+# tokio.workspace = true
 async-trait.workspace = true
 futures = "0.3"
 bytes = "1.5"

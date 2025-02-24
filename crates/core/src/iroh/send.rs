@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use iroh_blobs::ticket::BlobTicket;
 use tokio::sync::mpsc;
 
-use crate::errors::AppError;
+use crate::{errors::AppError, event::HorizonChannel};
 
-use super::{client_status::HorizonChannel, common::IrohState};
+use super::common::IrohState;
 
 /// Processes a blob by adding it to the blob store, sends indexing events, and returns a `BlobTicket`.
 ///

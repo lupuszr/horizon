@@ -21,15 +21,15 @@ use iroh::protocol::Router;
 use iroh_blobs::util::local_pool::LocalPool;
 use quic_rpc::transport::flume::FlumeConnector;
 
-pub(crate) type BlobsClient = iroh_blobs::rpc::client::blobs::Client<
+pub type BlobsClient = iroh_blobs::rpc::client::blobs::Client<
     FlumeConnector<iroh_blobs::rpc::proto::Response, iroh_blobs::rpc::proto::Request>,
 >;
-pub(crate) type DocsClient = iroh_docs::rpc::client::docs::Client<
+pub type DocsClient = iroh_docs::rpc::client::docs::Client<
     FlumeConnector<iroh_docs::rpc::proto::Response, iroh_docs::rpc::proto::Request>,
 >;
-use crate::errors::AppError;
+use crate::{errors::AppError, event::HorizonChannel};
 
-use super::client_status::{HorizonChannel, IrohClientStatus};
+use super::client_status::IrohClientStatus;
 
 /// Available command line options for configuring relays.
 #[derive(Clone, Debug)]

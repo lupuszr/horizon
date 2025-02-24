@@ -32,6 +32,20 @@ cid.workspace = true
 multihash.workspace = true
 multibase.workspace = true
 
+# tuntimes
+deno_core = { workspace = true }
+deno_error = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+wasmtime-wasi-http = "29.0.0"
+
+
+tempfile = { workspace = true }
+dirs-next = { workspace = true }
+
+# Local crates
+horizon-core = { path = "../../crates/core" }
 
 [dev-dependencies]
+wabt = "0.10.0"
 tokio-test = { workspace = true }

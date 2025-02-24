@@ -8,9 +8,11 @@ use iroh_blobs::{
 };
 use tokio::sync::mpsc;
 
-use crate::{errors::AppError, iroh::download_progress::show_download_progress};
+use crate::{
+    errors::AppError, event::HorizonChannel, iroh::download_progress::show_download_progress,
+};
 
-use super::{client_status::HorizonChannel, common::IrohState};
+use super::common::IrohState;
 
 pub async fn show_export_progress(
     mut stream: impl Stream<Item = anyhow::Result<ExportProgress>> + Unpin,
