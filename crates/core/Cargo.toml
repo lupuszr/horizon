@@ -16,7 +16,7 @@ futures = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
-serde-error = { workspace =  true }
+serde-error = { workspace = true }
 serde_json = { workspace = true }
 data-encoding = { workspace = true }
 chrono.workspace = true
@@ -56,17 +56,21 @@ clap = { workspace = true }
 console = { workspace = true }
 indicatif = { workspace = true }
 
+# S3
+s3s = { workspace = true }
+s3s-aws = { workspace = true }
+aws-sdk-s3 = { workspace = true, features = ["behavior-version-latest"] }
+aws-config = { workspace = true }
+aws-credential-types = { workspace = true }
 
-# randomness 
-rand = { workspace = true }# Utilities
+# randomness
+rand = { workspace = true } # Utilities
 
 bytes = "1.5"
 base64 = "0.21"
 tempfile = { workspace = true }
 
 num_cpus = { workspace = true }
-
-
 
 
 [dev-dependencies]

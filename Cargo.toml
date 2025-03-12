@@ -7,7 +7,7 @@ members = [
     "crates/plugin",
     "crates/apps/horizon-push/src-tauri",
     "crates/apps/horizon-push/src-cli",
-    "crates/wasm_plugins/rust_example"]
+]
 resolver = "2"
 
 [profile.dev]
@@ -72,7 +72,7 @@ multihash = "0.18"
 multibase = "0.9"
 
 # Time handling
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.40", features = ["serde"] }
 
 # Video processing
 ffmpeg-next = "6.1"
@@ -106,10 +106,22 @@ dirs-next = "2.0.0"
 
 uuid = { version = "1.7", features = ["v4", "serde"] }
 
+# S3 support
+s3s = { git = "https://github.com/Nugine/s3s", version = "0.11.0-dev" }
+s3s-aws = { git = "https://github.com/Nugine/s3s", version = "0.11.0-dev" }
+aws-sdk-s3 = "1.78.0"
+aws-config = { version = "1.5.18", default-features = false }
+aws-credential-types = { version = "1.2.1", features = ["test-util"] }
+
 
 # runtimes for plugins
 deno_core = "0.331.0"
-deno_error = { version = "0.5.5", features = ["serde_json", "serde", "url", "tokio"] }
+deno_error = { version = "0.5.5", features = [
+    "serde_json",
+    "serde",
+    "url",
+    "tokio",
+] }
 wasmtime = "29.0.1"
 wasmtime-wasi = "29.0.1"
 

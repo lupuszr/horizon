@@ -1,3 +1,5 @@
+use std::sync::PoisonError;
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -91,4 +93,13 @@ pub enum AppError {
 
     #[error("Internal channel error: {0}")]
     InternalChannelError(String),
+
+    #[error("Lock poisoned: {0}")]
+    LockError(String),
+}
+
+impl<T> From<PoisonError<T>> for AppError {
+    fn from(err: PoisonError<T>) -> Self {
+        AppError::LockError(err.to_string())
+    }
 }

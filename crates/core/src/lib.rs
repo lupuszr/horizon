@@ -6,6 +6,7 @@ use thiserror::Error;
 pub mod errors;
 pub mod event;
 pub mod iroh;
+pub mod s3;
 
 // TODO: deprecate this
 
