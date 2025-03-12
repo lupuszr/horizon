@@ -6,6 +6,8 @@ use futures::stream::{Stream, StreamExt};
 use futures::TryStreamExt;
 use iroh_docs::{CapabilityKind, NamespaceId};
 use std::collections::HashMap;
+use stdx::default::default;
+
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -114,7 +116,6 @@ impl HorizonSystem {
         let HorizonSystem {
             namespace_table, ..
         } = self;
-        // TODO: handle error
         let mut lock = namespace_table.write()?;
         lock.insert(doc_id, bucket_name);
         Ok(())
@@ -278,6 +279,87 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<PutObjectInput>,
     ) -> S3Result<S3Response<PutObjectOutput>> {
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, blobs, .. } = iroh_state;
+        let input = req.input;
+        if let Some(ref storage_class) = input.storage_class {
+            let is_valid = ["STANDARD", "REDUCED_REDUNDANCY"].contains(&storage_class.as_str());
+            if !is_valid {
+                return Err(s3_error!(InvalidStorageClass));
+            }
+        }
+
+        let PutObjectInput {
+            body,
+            bucket,
+            key,
+            metadata,
+            content_length,
+            ..
+        } = input;
+
+        let Some(body) = body else {
+            return Err(s3_error!(IncompleteBody));
+        };
+
+        let mut checksum: s3s::checksum::ChecksumHasher = default();
+        if input.checksum_crc32.is_some() {
+            checksum.crc32 = Some(default());
+        }
+        if input.checksum_crc32c.is_some() {
+            checksum.crc32c = Some(default());
+        }
+        if input.checksum_sha1.is_some() {
+            checksum.sha1 = Some(default());
+        }
+        if input.checksum_sha256.is_some() {
+            checksum.sha256 = Some(default());
+        }
+
+        // pub async fn copy_bytes<S, W>(mut stream: S, writer: &mut W) -> Result<u64>
+        // where
+        //     S: Stream<Item = Result<Bytes, StdError>> + Unpin,
+        //     W: AsyncWrite + Unpin,
+        // {
+        //     let mut nwritten: u64 = 0;
+        //     while let Some(result) = stream.next().await {
+        //         let bytes = match result {
+        //             Ok(x) => x,
+        //             Err(e) => return Err(Error::new(e)),
+        //         };
+        //         writer.write_all(&bytes).await?;
+        //         nwritten += bytes.len() as u64;
+        //     }
+        //     writer.flush().await?;
+        //     Ok(nwritten)
+        // }
+        while let Some(res) = body.next().await {
+            let r = res.unwrap();
+        }
+        let p = blobs.add_stream(input, tag)
+
+        // let mut md5_hash = <Md5 as Digest>::new();
+        // let stream = body.inspect_ok(|bytes| {
+        //     md5_hash.update(bytes.as_ref());
+        //     checksum.update(bytes.as_ref());
+        // });
+
+        // let checksum = checksum.finalize();
+        // if checksum.checksum_crc32 != input.checksum_crc32 {
+        //     return Err(s3_error!(BadDigest, "checksum_crc32 mismatch"));
+        // }
+        // if checksum.checksum_crc32c != input.checksum_crc32c {
+        //     return Err(s3_error!(BadDigest, "checksum_crc32c mismatch"));
+        // }
+        // if checksum.checksum_sha1 != input.checksum_sha1 {
+        //     return Err(s3_error!(BadDigest, "checksum_sha1 mismatch"));
+        // }
+        // if checksum.checksum_sha256 != input.checksum_sha256 {
+        //     return Err(s3_error!(BadDigest, "checksum_sha256 mismatch"));
+        // }
+        //
+        //
+
         todo!()
     }
 

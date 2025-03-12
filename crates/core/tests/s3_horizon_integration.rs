@@ -3,6 +3,7 @@ use horizon_core::s3::iroh_impl::HorizonSystem;
 use s3s::auth::SimpleAuth;
 use s3s::host::SingleDomain;
 use s3s::service::S3ServiceBuilder;
+use s3s::service::SharedS3Service;
 use tokio::sync::mpsc;
 
 use std::env;
@@ -54,7 +55,8 @@ async fn config() -> SdkConfig {
     };
 
     // Convert to aws http client
-    let client = s3s_aws::Client::from(service.into_shared());
+    let se: s3s::service::SharedS3Service = service.into_shared();
+    let client = s3s_aws::Client::from(se);
 
     // Setup aws sdk config
     SdkConfig::builder()
@@ -115,6 +117,58 @@ async fn test_list_buckets() -> Result<()> {
         .collect();
     assert!(bucket_names.contains(&bucket1_str));
     assert!(bucket_names.contains(&bucket2_str));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_list_objects_v2() -> Result<()> {
+    let cfg = config().await;
+    let c = Client::new(&cfg);
+    let bucket = format!("test-list-objects-v2-{}", Uuid::new_v4());
+    let bucket_str = bucket.as_str();
+    create_bucket(&c, bucket_str).await?;
+
+    let test_prefix = "/this/is/a/test/";
+    let key1 = "this/is/a/test/path/file1.txt";
+    let key2 = "this/is/a/test/path/file2.txt";
+    {
+        let content = "hello world\nनमस्ते दुनिया\n";
+        let crc32c = base64_simd::STANDARD
+            .encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+        c.put_object()
+            .bucket(bucket_str)
+            .key(key1)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .checksum_crc32_c(crc32c.as_str())
+            .send()
+            .await?;
+        c.put_object()
+            .bucket(bucket_str)
+            .key(key2)
+            .body(ByteStream::from_static(content.as_bytes()))
+            .checksum_crc32_c(crc32c.as_str())
+            .send()
+            .await?;
+    }
+
+    let result = c
+        .list_objects_v2()
+        .bucket(bucket_str)
+        .prefix(test_prefix)
+        .send()
+        .await;
+
+    let response = result.unwrap();
+
+    let contents: Vec<_> = response
+        .contents()
+        .iter()
+        .filter_map(|obj| obj.key())
+        .collect();
+    assert!(!contents.is_empty());
+    assert!(contents.contains(&key1));
+    assert!(contents.contains(&key2));
 
     Ok(())
 }
