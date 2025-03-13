@@ -4,8 +4,12 @@
 
 use futures::stream::{Stream, StreamExt};
 use futures::TryStreamExt;
+use iroh_blobs::rpc::client::blobs::AddOutcome;
+use iroh_docs::store::Query;
 use iroh_docs::{CapabilityKind, NamespaceId};
+use serde::Serialize;
 use std::collections::HashMap;
+
 use stdx::default::default;
 
 use std::path::PathBuf;
@@ -26,66 +30,9 @@ use crate::errors::AppError;
 use crate::event::HorizonChannel;
 use crate::iroh::common::DocsClient;
 use crate::iroh::common::IrohState;
+use crate::s3::helpers::adapt_stream;
 
-// use std::collections::VecDeque;
-// use std::io;
-// use std::ops::Neg;
-// use std::ops::Not;
-// use std::path::Component;
-// use std::path::{Path, PathBuf};
-
-// use tokio::fs;
-// use tokio::io::AsyncSeekExt;
-// use tokio_util::io::ReaderStream;
-
-// use futures::TryStreamExt;
-// use md5::{Digest, Md5};
-// use numeric_cast::NumericCast;
-// use stdx::default::default;
-// use tracing::debug;
-// use uuid::Uuid;
-//
-
-#[derive(Debug)]
-struct NamespaceLookupTable {
-    forward: HashMap<String, String>,
-    reverse: HashMap<String, String>,
-}
-
-impl NamespaceLookupTable {
-    fn new() -> Self {
-        Self {
-            forward: HashMap::new(),
-            reverse: HashMap::new(),
-        }
-    }
-
-    fn insert(&mut self, document_id: String, bucket_name: String) {
-        self.forward
-            .insert(document_id.clone(), bucket_name.clone());
-        self.reverse.insert(bucket_name, document_id);
-    }
-
-    fn get_by_document_id(&self, key: &str) -> Option<&String> {
-        self.forward.get(key)
-    }
-
-    fn get_by_bucket_name(&self, value: &str) -> Option<&String> {
-        self.reverse.get(value)
-    }
-
-    fn remove_by_document_id(&mut self, key: &str) {
-        if let Some(value) = self.forward.remove(key) {
-            self.reverse.remove(&value);
-        }
-    }
-
-    fn remove_by_bucket_name(&mut self, value: &str) {
-        if let Some(key) = self.reverse.remove(value) {
-            self.forward.remove(&key);
-        }
-    }
-}
+use super::namespace_lookup_table::NamespaceLookupTable;
 
 #[derive(Debug)]
 pub struct HorizonSystem {
@@ -272,7 +219,68 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<ListObjectsV2Input>,
     ) -> S3Result<S3Response<ListObjectsV2Output>> {
-        todo!()
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, blobs, .. } = iroh_state;
+        let input = req.input;
+        let bucket = input.bucket;
+
+        let document_id = self
+            .get_id_by_bucket_name(bucket.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(document_id) = document_id else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+        let document_id = NamespaceId::from_str(document_id.as_str())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let bucket_doc = docs
+            .open(document_id)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(bucket_doc) = bucket_doc else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+
+        let object_query = Query::key_prefix("object");
+        let entries = bucket_doc
+            .get_many(object_query)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        // TODO: read from multiple sources
+        let entries = entries.and_then(async |entry| {
+            let key = entry.key();
+            let key = String::from_utf8_lossy(key);
+            let key = key.strip_prefix("object::").unwrap();
+
+            let hash = entry.content_hash();
+            // let content = blobs.read_to_bytes(hash).await;
+            // content.map(|c| (entry, c))
+
+            let object = Object {
+                key: Some(key.to_string()),
+                ..Default::default()
+            };
+            Ok(object)
+        });
+        let entries = entries.collect::<Vec<_>>().await;
+        let objects = entries
+            .into_iter()
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let key_count: i32 = objects.len() as i32;
+
+        let output = ListObjectsV2Output {
+            key_count: Some(key_count),
+            max_keys: Some(key_count),
+            contents: Some(objects),
+            delimiter: input.delimiter,
+            encoding_type: input.encoding_type,
+            name: Some(bucket),
+            prefix: input.prefix,
+            ..Default::default()
+        };
+        Ok(S3Response::new(output))
     }
 
     async fn put_object(
@@ -282,6 +290,7 @@ impl S3 for HorizonSystem {
         let HorizonSystem { iroh_state, .. } = self;
         let IrohState { docs, blobs, .. } = iroh_state;
         let input = req.input;
+        // TODO: add support for other storage class later`
         if let Some(ref storage_class) = input.storage_class {
             let is_valid = ["STANDARD", "REDUCED_REDUNDANCY"].contains(&storage_class.as_str());
             if !is_valid {
@@ -298,6 +307,21 @@ impl S3 for HorizonSystem {
             ..
         } = input;
 
+        let document_id = self
+            .get_id_by_bucket_name(bucket)
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(document_id) = document_id else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+        let document_id = NamespaceId::from_str(document_id.as_str())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let bucket_doc = docs
+            .open(document_id)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(bucket_doc) = bucket_doc else {
+            return Err(s3_error!(NoSuchBucket));
+        };
         let Some(body) = body else {
             return Err(s3_error!(IncompleteBody));
         };
@@ -316,27 +340,40 @@ impl S3 for HorizonSystem {
             checksum.sha256 = Some(default());
         }
 
-        // pub async fn copy_bytes<S, W>(mut stream: S, writer: &mut W) -> Result<u64>
-        // where
-        //     S: Stream<Item = Result<Bytes, StdError>> + Unpin,
-        //     W: AsyncWrite + Unpin,
-        // {
-        //     let mut nwritten: u64 = 0;
-        //     while let Some(result) = stream.next().await {
-        //         let bytes = match result {
-        //             Ok(x) => x,
-        //             Err(e) => return Err(Error::new(e)),
-        //         };
-        //         writer.write_all(&bytes).await?;
-        //         nwritten += bytes.len() as u64;
-        //     }
-        //     writer.flush().await?;
-        //     Ok(nwritten)
-        // }
-        while let Some(res) = body.next().await {
-            let r = res.unwrap();
+        let progress = blobs
+            .add_stream(adapt_stream(body), iroh_blobs::util::SetTagOption::Auto)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let outcome: AddOutcome = progress
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let author_id = docs
+            .authors()
+            .default()
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        // Link the blob the the doc that represents the specified bucket
+        bucket_doc
+            .set_hash(
+                author_id,
+                format!("object::{}", key.clone()),
+                outcome.hash,
+                outcome.size,
+            )
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        // if there is some metadata link it as well
+        if let Some(data) = metadata {
+            let serialized = serde_cbor::to_vec(&data)
+                .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+            bucket_doc
+                .set_bytes(author_id, format!("metadata::{}", key), serialized)
+                .await
+                .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
         }
-        let p = blobs.add_stream(input, tag)
 
         // let mut md5_hash = <Md5 as Digest>::new();
         // let stream = body.inspect_ok(|bytes| {
@@ -360,7 +397,15 @@ impl S3 for HorizonSystem {
         //
         //
 
-        todo!()
+        let output = PutObjectOutput {
+            // e_tag: Some(e_tag),
+            // checksum_crc32: checksum.checksum_crc32,
+            // checksum_crc32c: checksum.checksum_crc32c,
+            // checksum_sha1: checksum.checksum_sha1,
+            // checksum_sha256: checksum.checksum_sha256,
+            ..Default::default()
+        };
+        Ok(S3Response::new(output))
     }
 
     async fn create_multipart_upload(

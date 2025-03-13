@@ -13,11 +13,13 @@ path = "src/lib.rs"
 tokio = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
+hyper = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
 serde-error = { workspace = true }
 serde_json = { workspace = true }
+serde_cbor = { workspace = true }
 data-encoding = { workspace = true }
 chrono.workspace = true
 # Error handling and logging
