@@ -1,9 +1,7 @@
-use aws_sdk_s3::operation::create_bucket;
 use horizon_core::s3::iroh_impl::HorizonSystem;
 use s3s::auth::SimpleAuth;
 use s3s::host::SingleDomain;
 use s3s::service::S3ServiceBuilder;
-use s3s::service::SharedS3Service;
 use tokio::sync::mpsc;
 
 use std::env;
@@ -19,14 +17,10 @@ use aws_sdk_s3::Client;
 
 use aws_sdk_s3::types::BucketLocationConstraint;
 use aws_sdk_s3::types::ChecksumMode;
-use aws_sdk_s3::types::CompletedMultipartUpload;
-use aws_sdk_s3::types::CompletedPart;
 use aws_sdk_s3::types::CreateBucketConfiguration;
 
 use anyhow::Result;
-use tokio::sync::Mutex;
-use tokio::sync::MutexGuard;
-use tracing::{debug, error};
+use tracing::debug;
 use uuid::Uuid;
 
 const FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-aws");

@@ -1,11 +1,8 @@
 use futures::{Stream, StreamExt};
 use hyper::body::Bytes;
 use iroh_blobs::rpc::client::blobs::Reader;
-use pin_project::pin_project;
+use s3s::dto::StreamingBlob;
 use s3s::stream::ByteStream;
-use s3s::stream::DynByteStream;
-use s3s::stream::RemainingLength;
-use s3s::{dto::StreamingBlob, StdError};
 use std::error::Error;
 use std::io;
 use std::pin::Pin;

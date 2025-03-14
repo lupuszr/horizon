@@ -1,19 +1,14 @@
-// use crate::fs::FileSystem;
-// use crate::fs::InternalInfo;
-// use crate::utils::*;
-
-use futures::stream::{Stream, StreamExt};
+use futures::stream::StreamExt;
 use futures::TryStreamExt;
 use iroh_blobs::rpc::client::blobs::AddOutcome;
 use iroh_docs::store::Query;
 use iroh_docs::{CapabilityKind, NamespaceId};
-use serde::Serialize;
+
 use std::collections::HashMap;
 
 use stdx::default::default;
 
 use std::path::PathBuf;
-use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::RwLock;
 
@@ -24,11 +19,10 @@ use s3s::S3Result;
 use s3s::S3;
 use s3s::{S3Request, S3Response};
 use tokio::sync::mpsc::Sender;
-use tracing_subscriber::field::debug;
 
 use crate::errors::AppError;
 use crate::event::HorizonChannel;
-use crate::iroh::common::DocsClient;
+
 use crate::iroh::common::IrohState;
 use crate::s3::helpers::{adapt_stream, fmt_content_range, reader_to_streaming_blob};
 
@@ -117,7 +111,7 @@ impl S3 for HorizonSystem {
 
     async fn copy_object(
         &self,
-        req: S3Request<CopyObjectInput>,
+        _req: S3Request<CopyObjectInput>,
     ) -> S3Result<S3Response<CopyObjectOutput>> {
         todo!()
     }
@@ -127,7 +121,7 @@ impl S3 for HorizonSystem {
         req: S3Request<DeleteBucketInput>,
     ) -> S3Result<S3Response<DeleteBucketOutput>> {
         let HorizonSystem { iroh_state, .. } = self;
-        let IrohState { docs, blobs, .. } = iroh_state;
+        let IrohState { docs, .. } = iroh_state;
         let input = req.input;
         let bucket = input.bucket;
 
@@ -208,14 +202,14 @@ impl S3 for HorizonSystem {
 
     async fn delete_objects(
         &self,
-        req: S3Request<DeleteObjectsInput>,
+        _req: S3Request<DeleteObjectsInput>,
     ) -> S3Result<S3Response<DeleteObjectsOutput>> {
         todo!()
     }
 
     async fn get_bucket_location(
         &self,
-        req: S3Request<GetBucketLocationInput>,
+        _req: S3Request<GetBucketLocationInput>,
     ) -> S3Result<S3Response<GetBucketLocationOutput>> {
         todo!()
     }
@@ -312,14 +306,14 @@ impl S3 for HorizonSystem {
 
     async fn head_bucket(
         &self,
-        req: S3Request<HeadBucketInput>,
+        _req: S3Request<HeadBucketInput>,
     ) -> S3Result<S3Response<HeadBucketOutput>> {
         todo!()
     }
 
     async fn head_object(
         &self,
-        req: S3Request<HeadObjectInput>,
+        _req: S3Request<HeadObjectInput>,
     ) -> S3Result<S3Response<HeadObjectOutput>> {
         todo!()
     }
@@ -363,7 +357,7 @@ impl S3 for HorizonSystem {
 
     async fn list_objects(
         &self,
-        req: S3Request<ListObjectsInput>,
+        _req: S3Request<ListObjectsInput>,
     ) -> S3Result<S3Response<ListObjectsOutput>> {
         todo!()
     }
@@ -373,7 +367,7 @@ impl S3 for HorizonSystem {
         req: S3Request<ListObjectsV2Input>,
     ) -> S3Result<S3Response<ListObjectsV2Output>> {
         let HorizonSystem { iroh_state, .. } = self;
-        let IrohState { docs, blobs, .. } = iroh_state;
+        let IrohState { docs, .. } = iroh_state;
         let input = req.input;
         let bucket = input.bucket;
 
@@ -404,10 +398,6 @@ impl S3 for HorizonSystem {
             let key = entry.key();
             let key = String::from_utf8_lossy(key);
             let key = key.strip_prefix("object::").unwrap();
-
-            let hash = entry.content_hash();
-            // let content = blobs.read_to_bytes(hash).await;
-            // content.map(|c| (entry, c))
 
             let object = Object {
                 key: Some(key.to_string()),
@@ -456,7 +446,6 @@ impl S3 for HorizonSystem {
             bucket,
             key,
             metadata,
-            content_length,
             ..
         } = input;
 
@@ -563,42 +552,42 @@ impl S3 for HorizonSystem {
 
     async fn create_multipart_upload(
         &self,
-        req: S3Request<CreateMultipartUploadInput>,
+        _req: S3Request<CreateMultipartUploadInput>,
     ) -> S3Result<S3Response<CreateMultipartUploadOutput>> {
         todo!()
     }
 
     async fn upload_part(
         &self,
-        req: S3Request<UploadPartInput>,
+        _req: S3Request<UploadPartInput>,
     ) -> S3Result<S3Response<UploadPartOutput>> {
         todo!()
     }
 
     async fn upload_part_copy(
         &self,
-        req: S3Request<UploadPartCopyInput>,
+        _req: S3Request<UploadPartCopyInput>,
     ) -> S3Result<S3Response<UploadPartCopyOutput>> {
         todo!()
     }
 
     async fn list_parts(
         &self,
-        req: S3Request<ListPartsInput>,
+        _req: S3Request<ListPartsInput>,
     ) -> S3Result<S3Response<ListPartsOutput>> {
         todo!()
     }
 
     async fn complete_multipart_upload(
         &self,
-        req: S3Request<CompleteMultipartUploadInput>,
+        _req: S3Request<CompleteMultipartUploadInput>,
     ) -> S3Result<S3Response<CompleteMultipartUploadOutput>> {
         todo!()
     }
 
     async fn abort_multipart_upload(
         &self,
-        req: S3Request<AbortMultipartUploadInput>,
+        _req: S3Request<AbortMultipartUploadInput>,
     ) -> S3Result<S3Response<AbortMultipartUploadOutput>> {
         todo!()
     }
