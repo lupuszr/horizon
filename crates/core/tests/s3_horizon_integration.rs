@@ -220,10 +220,10 @@ async fn test_single_object() -> Result<()> {
         assert_eq!(body.as_ref(), content.as_bytes());
     }
 
-    // {
-    //     delete_object(&c, bucket, key).await?;
-    //     delete_bucket(&c, bucket).await?;
-    // }
+    {
+        delete_object(&c, bucket, key).await?;
+        delete_bucket(&c, bucket).await?;
+    }
 
     Ok(())
 }

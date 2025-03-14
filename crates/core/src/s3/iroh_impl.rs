@@ -126,14 +126,84 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<DeleteBucketInput>,
     ) -> S3Result<S3Response<DeleteBucketOutput>> {
-        todo!()
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, blobs, .. } = iroh_state;
+        let input = req.input;
+        let bucket = input.bucket;
+
+        let document_id = self
+            .get_id_by_bucket_name(bucket.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(document_id) = document_id else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+        let document_id = NamespaceId::from_str(document_id.as_str())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        docs.drop_doc(document_id)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let output = DeleteBucketOutput {
+            ..Default::default()
+        };
+        Ok(S3Response::new(output))
     }
 
     async fn delete_object(
         &self,
         req: S3Request<DeleteObjectInput>,
     ) -> S3Result<S3Response<DeleteObjectOutput>> {
-        todo!()
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, blobs, .. } = iroh_state;
+        let input = req.input;
+        let bucket = input.bucket;
+        let key = input.key;
+
+        let author_id = docs
+            .authors()
+            .default()
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let document_id = self
+            .get_id_by_bucket_name(bucket.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(document_id) = document_id else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+        let document_id = NamespaceId::from_str(document_id.as_str())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let bucket_doc = docs
+            .open(document_id)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(bucket_doc) = bucket_doc else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+
+        let query = format!("object::{}", key);
+        let object_query = Query::key_exact(query.clone());
+        let entry = bucket_doc
+            .get_one(object_query)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(entry) = entry else {
+            return Err(s3_error!(NoSuchKey));
+        };
+        let blob_hash = entry.content_hash();
+
+        // we need to remove the blob and the key as well
+        bucket_doc
+            .del(author_id, query.into_bytes())
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let _ = blobs.delete_blob(blob_hash).await;
+
+        let output = DeleteObjectOutput {
+            ..Default::default()
+        };
+
+        Ok(S3Response::new(output))
     }
 
     async fn delete_objects(
