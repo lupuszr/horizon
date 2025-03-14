@@ -166,9 +166,64 @@ async fn test_list_objects_v2() -> Result<()> {
         .iter()
         .filter_map(|obj| obj.key())
         .collect();
+
     assert!(!contents.is_empty());
     assert!(contents.contains(&key1));
     assert!(contents.contains(&key2));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_single_object() -> Result<()> {
+    let cfg = config().await;
+    let c = Client::new(&cfg);
+
+    let bucket = format!("test-single-object-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "sample.txt";
+    let content = "hello world\n你好世界\n";
+    let crc32c =
+        base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+
+    create_bucket(&c, bucket).await?;
+
+    {
+        let body = ByteStream::from_static(content.as_bytes());
+        c.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .metadata("meta", "pig")
+            .checksum_crc32_c(crc32c.as_str())
+            .send()
+            .await?;
+    }
+
+    {
+        let ans = c
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .checksum_mode(ChecksumMode::Enabled)
+            .send()
+            .await?;
+
+        let content_length: usize = ans.content_length().unwrap().try_into().unwrap();
+        // let checksum_crc32c = ans.checksum_crc32_c.unwrap();
+        let body = ans.body.collect().await?.into_bytes();
+        let metadata = ans.metadata.unwrap();
+
+        assert_eq!(content_length, content.len());
+        assert_eq!(metadata.get("meta"), Some(&("pig".to_string())));
+        // assert_eq!(checksum_crc32c, crc32c);
+        assert_eq!(body.as_ref(), content.as_bytes());
+    }
+
+    // {
+    //     delete_object(&c, bucket, key).await?;
+    //     delete_bucket(&c, bucket).await?;
+    // }
 
     Ok(())
 }

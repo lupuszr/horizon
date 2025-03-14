@@ -70,6 +70,8 @@ aws-credential-types = { workspace = true }
 # randomness
 rand = { workspace = true } # Utilities
 
+pin-project = "1.1.10"
+pin-project-lite = "0.2.16"
 bytes = "1.5"
 base64 = "0.21"
 base64-simd = "0.8.0"

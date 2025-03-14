@@ -30,7 +30,7 @@ use crate::errors::AppError;
 use crate::event::HorizonChannel;
 use crate::iroh::common::DocsClient;
 use crate::iroh::common::IrohState;
-use crate::s3::helpers::adapt_stream;
+use crate::s3::helpers::{adapt_stream, fmt_content_range, reader_to_streaming_blob};
 
 use super::namespace_lookup_table::NamespaceLookupTable;
 
@@ -154,7 +154,90 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<GetObjectInput>,
     ) -> S3Result<S3Response<GetObjectOutput>> {
-        todo!()
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, blobs, .. } = iroh_state;
+        let input = req.input;
+        let bucket = input.bucket;
+        let key = input.key;
+
+        let document_id = self
+            .get_id_by_bucket_name(bucket.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(document_id) = document_id else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+        let document_id = NamespaceId::from_str(document_id.as_str())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let bucket_doc = docs
+            .open(document_id)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(bucket_doc) = bucket_doc else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+
+        let object_query = Query::key_exact(format!("object::{}", key));
+        let entry = bucket_doc
+            .get_one(object_query)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let Some(entry) = entry else {
+            return Err(s3_error!(NoSuchKey));
+        };
+
+        let hash = entry.content_hash();
+        let file_len = entry.content_len();
+        let (content_length, content_range) = match input.range {
+            None => (file_len, None),
+            Some(range) => {
+                let file_range = range.check(file_len)?;
+                let content_length = file_range.end - file_range.start;
+                let content_range =
+                    fmt_content_range(file_range.start, file_range.end - 1, file_len);
+                (content_length, Some(content_range))
+            }
+        };
+        let reader = blobs
+            .read(hash)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let blob = reader_to_streaming_blob(reader);
+
+        let metadata_query = Query::key_exact(format!("metadata::{}", key));
+        let metadata_entry = bucket_doc
+            .get_one(metadata_query)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let object_metadata = if let Some(meta) = metadata_entry {
+            let metadata_content = blobs
+                .read_to_bytes(meta.content_hash())
+                .await
+                .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+            let deserialized: HashMap<String, String> =
+                serde_cbor::from_slice(&metadata_content).unwrap();
+
+            Some(deserialized)
+        } else {
+            None
+        };
+
+        let output = GetObjectOutput {
+            body: Some(blob),
+            content_length: Some(content_length as i64),
+            content_range,
+            // last_modified: Some(last_modified),
+            metadata: object_metadata,
+            // e_tag: Some(e_tag),
+            // checksum_crc32: checksum.checksum_crc32,
+            // checksum_crc32c: checksum.checksum_crc32c,
+            // checksum_sha1: checksum.checksum_sha1,
+            // checksum_sha256: checksum.checksum_sha256,
+            ..Default::default()
+        };
+        Ok(S3Response::new(output))
     }
 
     async fn head_bucket(
