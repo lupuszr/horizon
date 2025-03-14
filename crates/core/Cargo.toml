@@ -13,11 +13,13 @@ path = "src/lib.rs"
 tokio = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
+hyper = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
-serde-error = { workspace =  true }
+serde-error = { workspace = true }
 serde_json = { workspace = true }
+serde_cbor = { workspace = true }
 data-encoding = { workspace = true }
 chrono.workspace = true
 # Error handling and logging
@@ -56,17 +58,27 @@ clap = { workspace = true }
 console = { workspace = true }
 indicatif = { workspace = true }
 
+std-next = { workspace = true }
 
-# randomness 
-rand = { workspace = true }# Utilities
+# S3
+s3s = { workspace = true }
+s3s-aws = { workspace = true }
+aws-sdk-s3 = { workspace = true, features = ["behavior-version-latest"] }
+aws-config = { workspace = true }
+aws-credential-types = { workspace = true }
 
+# randomness
+rand = { workspace = true } # Utilities
+
+pin-project = "1.1.10"
+pin-project-lite = "0.2.16"
 bytes = "1.5"
 base64 = "0.21"
+base64-simd = "0.8.0"
+crc32c = "0.6.8"
 tempfile = { workspace = true }
 
 num_cpus = { workspace = true }
-
-
 
 
 [dev-dependencies]
