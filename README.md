@@ -1,40 +1,49 @@
-## Horizon Stream
+# 🌐 HorizonPush
+
+HorizonPush is a world file-sharing and synchronization tool leveraging `iroh` for peer-to-peer transfers and multi-provider blob streaming. It provides an extensible WebAssembly (Wasm) API, integrates with S3 for storage, and includes a Tauri-based desktop application.
+
+## ⭐ Features
+
+- 📂 **Decentralized File Sharing**: Uses `iroh-blobs` for secure, verifiable blob transfers.
+- 🔀 **Multi-Provider Blob Streaming**: Enables efficient file distribution by leveraging multiple sources.
+- 🧩 **WebAssembly Plugin Support**: Extend functionality with third-party Wasm plugins.
+- ☁️ **S3 Integration**: Acts as an S3-compatible storage proxy with local caching.
+- 🖥️ **Tauri Desktop App**: Provides a cross-platform, native UI for managing transfers.
+
+## 🧩 WebAssembly API
+
+HorizonPush exposes a Wasm API, allowing developers to extend its functionality with custom plugins. The Wasm runtime has access to:
+
+- 📜 `iroh-docs`: Multi-dimensional key-value document store.
+- 📦 `iroh-blobs`: Secure blob transfers with BLAKE3 verification.
+- ⚙️ `horizon-sdk`: Helper functions for interacting with HorizonPush internals.
 
 
-Storage Crate:
+## 📜 iroh Integration with S3
 
-Iroh for decentralized storage
-Async support for file operations
-Basic file handling utilities
+HorizonPush acts as an S3 proxy with intelligent caching:
 
-
-Video Crate:
-
-FFmpeg bindings for video processing
-Temporary file handling for processing
-Progress tracking for long operations
+- 🔄 **S3 API Compatibility**: Supports standard S3 operations (PUT, GET, DELETE).
+- 💾 **Local-First Syncing**: Keeps frequently accessed files locally.
+- 🗄️ **Transparent Caching**: Moves rarely used files to S3 storage.
 
 
-Streaming Crate:
+## 🖥️ Tauri Desktop App
 
-QUIC protocol support
-HLS playlist generation and handling
-Metrics for monitoring stream health
+The HorizonPush desktop application provides a native UI for:
 
+- 📂 Managing file transfers
+- ⚙️ Configuring S3 settings
+- 🧩 Installing and managing Wasm plugins
 
-API Crate:
+### ▶️ Running the Tauri App
 
-Full Axum setup with middleware
-File upload handling
-OpenAPI documentation
-Comprehensive testing support
+```sh
+cd horizonpush-tauri
+npm install
+npm run tauri dev
+```
 
+## 🤝 Contributing
 
-
-Some notable features included:
-
-Documentation: OpenAPI support via utoipa
-Testing: Comprehensive testing utilities for each crate
-Metrics: Prometheus exports for monitoring
-Validation: Request validation via validator
-Error Handling: Consistent error handling across crates
+Contributions are welcome! Submit issues and pull requests on GitHub.
