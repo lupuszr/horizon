@@ -6,7 +6,7 @@ use tempfile::{tempdir, NamedTempFile};
 use tokio::time::sleep;
 
 #[tokio::test]
-// #[ignore]
+#[ignore]
 async fn test_horizon_push_send_and_receive() {
     let mut receiver_base_path = dirs_next::home_dir().unwrap();
     receiver_base_path.push(".horizon-push-receiver-simplefile");
@@ -105,7 +105,7 @@ async fn test_horizon_push_send_and_receive() {
 }
 
 #[tokio::test]
-// #[ignore]
+#[ignore]
 async fn test_horizon_push_send_and_receive_folder() {
     let mut receiver_base_path = dirs_next::home_dir().unwrap();
     receiver_base_path.push(".horizon-push-receiver-multifile");

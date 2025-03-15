@@ -94,7 +94,8 @@ async fn delete_bucket(c: &Client, bucket: &str) -> Result<()> {
 
 #[tokio::test]
 async fn test_list_buckets() -> Result<()> {
-    let (cfg, _) = config(FS_ROOT).await;
+    const NODE_FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-test_list_buckets");
+    let (cfg, _) = config(NODE_FS_ROOT).await;
     let c = Client::new(&cfg);
     let response1 = c.list_buckets().send().await;
     drop(response1);
@@ -117,12 +118,17 @@ async fn test_list_buckets() -> Result<()> {
     assert!(bucket_names.contains(&bucket1_str));
     assert!(bucket_names.contains(&bucket2_str));
 
+    {
+        fs::remove_dir_all(NODE_FS_ROOT).unwrap();
+    }
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_list_objects_v2() -> Result<()> {
-    let (cfg, _) = config(FS_ROOT).await;
+    const NODE_FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-test_list_objects_v2");
+    let (cfg, _) = config(NODE_FS_ROOT).await;
     let c = Client::new(&cfg);
     let bucket = format!("test-list-objects-v2-{}", Uuid::new_v4());
     let bucket_str = bucket.as_str();
@@ -170,12 +176,17 @@ async fn test_list_objects_v2() -> Result<()> {
     assert!(contents.contains(&key1));
     assert!(contents.contains(&key2));
 
+    {
+        fs::remove_dir_all(NODE_FS_ROOT).unwrap();
+    }
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_single_object() -> Result<()> {
-    let (cfg, _) = config(FS_ROOT).await;
+    const NODE_FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-test_single_object");
+    let (cfg, _) = config(NODE_FS_ROOT).await;
     let c = Client::new(&cfg);
 
     let bucket = format!("test-single-object-{}", Uuid::new_v4());
@@ -222,6 +233,7 @@ async fn test_single_object() -> Result<()> {
     {
         delete_object(&c, bucket, key).await?;
         delete_bucket(&c, bucket).await?;
+        fs::remove_dir_all(NODE_FS_ROOT).unwrap();
     }
 
     Ok(())
@@ -311,6 +323,8 @@ async fn test_multinode_object_sync_and_fetch() -> Result<()> {
         delete_bucket(&client1, bucket).await?;
         delete_object(&client2, bucket, key).await?;
         delete_bucket(&client2, bucket).await?;
+        fs::remove_dir_all(NODE1_FS_ROOT).unwrap();
+        fs::remove_dir_all(NODE2_FS_ROOT2).unwrap();
     }
 
     Ok(())
