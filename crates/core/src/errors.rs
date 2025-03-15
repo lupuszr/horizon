@@ -96,6 +96,12 @@ pub enum AppError {
 
     #[error("Lock poisoned: {0}")]
     LockError(String),
+
+    #[error("No such bucket")]
+    S3NoBucket,
+
+    #[error("Bucket already imported")]
+    S3BucketExists,
 }
 
 impl<T> From<PoisonError<T>> for AppError {

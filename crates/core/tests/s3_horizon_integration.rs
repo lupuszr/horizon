@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use horizon_core::s3::iroh_impl::HorizonSystem;
 use s3s::auth::SimpleAuth;
 use s3s::host::SingleDomain;
@@ -6,6 +7,7 @@ use tokio::sync::mpsc;
 
 use std::env;
 use std::fs;
+use std::sync::Arc;
 
 use aws_config::SdkConfig;
 use aws_credential_types::provider::SharedCredentialsProvider;
@@ -27,7 +29,7 @@ const FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-aws");
 const DOMAIN_NAME: &str = "localhost:8014";
 const REGION: &str = "us-west-2";
 
-async fn config() -> SdkConfig {
+async fn config(node_path: &str) -> (SdkConfig, HorizonSystem) {
     // Fake credentials
     let cred = Credentials::for_tests();
 
@@ -35,11 +37,11 @@ async fn config() -> SdkConfig {
     fs::create_dir_all(FS_ROOT).unwrap();
     let (tx_send, _rx_sender) = mpsc::channel(100);
 
-    let hs = HorizonSystem::new(FS_ROOT, tx_send).await.unwrap();
+    let hs = HorizonSystem::new(node_path, tx_send).await.unwrap();
 
     // Setup S3 service
     let service = {
-        let mut b = S3ServiceBuilder::new(hs);
+        let mut b = S3ServiceBuilder::new(hs.clone());
         b.set_auth(SimpleAuth::from_single(
             cred.access_key_id(),
             cred.secret_access_key(),
@@ -53,12 +55,15 @@ async fn config() -> SdkConfig {
     let client = s3s_aws::Client::from(se);
 
     // Setup aws sdk config
-    SdkConfig::builder()
-        .credentials_provider(SharedCredentialsProvider::new(cred))
-        .http_client(client)
-        .region(Region::new(REGION))
-        .endpoint_url(format!("http://{DOMAIN_NAME}"))
-        .build()
+    (
+        SdkConfig::builder()
+            .credentials_provider(SharedCredentialsProvider::new(cred))
+            .http_client(client)
+            .region(Region::new(REGION))
+            .endpoint_url(format!("http://{DOMAIN_NAME}"))
+            .build(),
+        hs,
+    )
 }
 
 async fn create_bucket(c: &Client, bucket: &str) -> Result<()> {
@@ -89,7 +94,7 @@ async fn delete_bucket(c: &Client, bucket: &str) -> Result<()> {
 
 #[tokio::test]
 async fn test_list_buckets() -> Result<()> {
-    let cfg = config().await;
+    let (cfg, _) = config(FS_ROOT).await;
     let c = Client::new(&cfg);
     let response1 = c.list_buckets().send().await;
     drop(response1);
@@ -117,7 +122,7 @@ async fn test_list_buckets() -> Result<()> {
 
 #[tokio::test]
 async fn test_list_objects_v2() -> Result<()> {
-    let cfg = config().await;
+    let (cfg, _) = config(FS_ROOT).await;
     let c = Client::new(&cfg);
     let bucket = format!("test-list-objects-v2-{}", Uuid::new_v4());
     let bucket_str = bucket.as_str();
@@ -170,7 +175,7 @@ async fn test_list_objects_v2() -> Result<()> {
 
 #[tokio::test]
 async fn test_single_object() -> Result<()> {
-    let cfg = config().await;
+    let (cfg, _) = config(FS_ROOT).await;
     let c = Client::new(&cfg);
 
     let bucket = format!("test-single-object-{}", Uuid::new_v4());
@@ -217,6 +222,69 @@ async fn test_single_object() -> Result<()> {
     {
         delete_object(&c, bucket, key).await?;
         delete_bucket(&c, bucket).await?;
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_multinode_object_fetch() -> Result<()> {
+    const FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-node-1");
+    const FS_ROOT2: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-node-2");
+    let (cfg, hs1) = config(FS_ROOT).await;
+    let c1 = Client::new(&cfg);
+
+    let (cfg, hs2) = config(FS_ROOT2).await;
+    let c2 = Client::new(&cfg);
+
+    let bucket = format!("test-object-download-{}", Uuid::new_v4());
+    let bucket = bucket.as_str();
+    let key = "sample.txt";
+    let content = "hello world\n你好世界\n";
+    let crc32c =
+        base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
+
+    create_bucket(&c1, bucket).await?;
+    {
+        let body = ByteStream::from_static(content.as_bytes());
+        c1.put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(body)
+            .metadata("meta", "pig")
+            .checksum_crc32_c(crc32c.as_str())
+            .send()
+            .await?;
+    }
+
+    let ticket = hs1.share_bucket(bucket.to_string()).await.unwrap();
+    let mut events = hs2.import_bucket(ticket).await.unwrap();
+    loop {
+        let Some(Ok(ev)) = events.next().await else {
+            break;
+        };
+        match ev {
+            iroh_docs::engine::LiveEvent::SyncFinished(_sync_event) => break,
+            _ => continue,
+        }
+    }
+
+    {
+        let ans = c2
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .checksum_mode(ChecksumMode::Enabled)
+            .send()
+            .await?;
+
+        let content_length: usize = ans.content_length().unwrap().try_into().unwrap();
+        let body = ans.body.collect().await?.into_bytes();
+        let metadata = ans.metadata.unwrap();
+
+        assert_eq!(content_length, content.len());
+        assert_eq!(metadata.get("meta"), Some(&("pig".to_string())));
+        assert_eq!(body.as_ref(), content.as_bytes());
     }
 
     Ok(())

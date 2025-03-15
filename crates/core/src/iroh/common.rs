@@ -243,6 +243,7 @@ impl IrohState {
             .await
             .map_err(|e| AppError::IrohRouterError(e.to_string()))?;
 
+        println!("router;: {:?}", router.endpoint().direct_addresses().get());
         // Err(router)
 
         let blobs_client = blobs.client().clone();

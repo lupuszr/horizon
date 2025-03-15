@@ -1,8 +1,9 @@
 use futures::stream::StreamExt;
-use futures::TryStreamExt;
+use futures::{Stream, TryStreamExt};
 use iroh_blobs::rpc::client::blobs::AddOutcome;
+use iroh_docs::engine::LiveEvent;
 use iroh_docs::store::Query;
-use iroh_docs::{CapabilityKind, NamespaceId};
+use iroh_docs::{CapabilityKind, DocTicket, NamespaceId};
 
 use std::collections::HashMap;
 
@@ -10,7 +11,7 @@ use stdx::default::default;
 
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use s3s::dto::*;
 use s3s::s3_error;
@@ -28,11 +29,16 @@ use crate::s3::helpers::{adapt_stream, fmt_content_range, reader_to_streaming_bl
 
 use super::namespace_lookup_table::NamespaceLookupTable;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HorizonSystem {
     iroh_state: IrohState,
     // TODO: we need to find a proper way to store the linking
-    namespace_table: RwLock<NamespaceLookupTable>,
+    pub namespace_table: Arc<RwLock<NamespaceLookupTable>>,
+}
+
+pub struct HorizonS3BucketTicket {
+    pub bucket_name: String,
+    pub ticket: DocTicket,
 }
 
 impl HorizonSystem {
@@ -43,9 +49,10 @@ impl HorizonSystem {
         let path =
             PathBuf::from_str(base_path).map_err(|err| AppError::PathError(err.to_string()))?;
         let iroh_state = IrohState::new(path, tx).await?;
+
         Ok(HorizonSystem {
             iroh_state,
-            namespace_table: RwLock::new(NamespaceLookupTable::new()),
+            namespace_table: Arc::new(RwLock::new(NamespaceLookupTable::new())),
         })
     }
 
@@ -72,6 +79,75 @@ impl HorizonSystem {
         let lock = self.namespace_table.read()?;
         let id = (lock.get_by_document_id(id.as_str())).cloned();
         Ok(id)
+    }
+
+    pub fn sync_buckets(&self) -> Result<(), AppError> {
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, .. } = iroh_state;
+        // docs.
+        Ok(())
+    }
+
+    pub async fn import_bucket(
+        &self,
+        bucket_ticket: HorizonS3BucketTicket,
+    ) -> Result<impl Stream<Item = anyhow::Result<LiveEvent>>, AppError> {
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, .. } = iroh_state;
+        let HorizonS3BucketTicket {
+            bucket_name,
+            ticket,
+        } = bucket_ticket;
+
+        let document_id = self
+            .get_id_by_bucket_name(bucket_name.clone())
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+        let None = document_id else {
+            return Err(AppError::S3BucketExists);
+        };
+        let (doc, stream) = docs
+            .import_and_subscribe(ticket.clone())
+            .await
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+        self.link_bucket_name_with_doc_id(doc.id().to_string(), bucket_name)
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+        Ok(stream)
+    }
+
+    pub async fn share_bucket(&self, bucket: String) -> Result<HorizonS3BucketTicket, AppError> {
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, .. } = iroh_state;
+
+        let document_id = self
+            .get_id_by_bucket_name(bucket.clone())
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+        let Some(document_id) = document_id else {
+            return Err(AppError::S3NoBucket);
+        };
+        let document_id = NamespaceId::from_str(document_id.as_str())
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+        let bucket_doc = docs
+            .open(document_id)
+            .await
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+        let Some(bucket_doc) = bucket_doc else {
+            return Err(AppError::S3NoBucket);
+        };
+
+        let ticket = bucket_doc
+            .share(
+                iroh_docs::rpc::client::docs::ShareMode::Write,
+                iroh_docs::rpc::AddrInfoOptions::RelayAndAddresses,
+            )
+            .await
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+        Ok(HorizonS3BucketTicket {
+            bucket_name: bucket,
+            ticket,
+        })
     }
 }
 
