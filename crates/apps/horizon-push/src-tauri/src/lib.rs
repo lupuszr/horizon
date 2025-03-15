@@ -6,7 +6,6 @@ use horizon_core::{
         send::index_and_expose,
     },
 };
-use iroh_blobs::ticket::BlobTicket;
 use std::{collections::HashMap, fmt};
 use std::{env, path::PathBuf};
 use tauri::{AppHandle, Emitter, Manager};
