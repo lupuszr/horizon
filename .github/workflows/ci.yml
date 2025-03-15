@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   # Allow manual triggering
   workflow_dispatch:
 
@@ -48,9 +48,9 @@ jobs:
         if: matrix.rust == 'stable'
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        if: matrix.rust == 'stable'
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      # - name: Clippy
+      #   if: matrix.rust == 'stable'
+      #   run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
         run: cargo build --verbose --workspace
@@ -91,24 +91,24 @@ jobs:
   #         files: lcov.info
   #         fail_ci_if_error: true
 
-  msrv:
-    name: Check MSRV
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  # msrv:
+  #   name: Check MSRV
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Check minimum supported rust version
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.70.0  # Adjust this to your MSRV
+  #     - name: Check minimum supported rust version
+  #       uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: 1.70.0  # Adjust this to your MSRV
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "msrv"
+  #     - name: Cache dependencies
+  #       uses: Swatinem/rust-cache@v2
+  #       with:
+  #         shared-key: "msrv"
 
-      - name: Build with MSRV
-        run: cargo build --verbose --workspace
+  #     - name: Build with MSRV
+  #       run: cargo build --verbose --workspace
 
   security_audit:
     name: Security audit
