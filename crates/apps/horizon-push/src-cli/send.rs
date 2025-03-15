@@ -1,22 +1,13 @@
-use data_encoding::HEXLOWER;
 use horizon_core::{
     errors::AppError,
     event::HorizonChannel,
     iroh::{common::IrohState, send::index_and_expose},
 };
-use indicatif::HumanBytes;
-use rand::Rng;
-// use anyhow::Result;
-use iroh::{protocol::Router, Endpoint};
-// use iroh_base::ticket::BlobTicket;
-use iroh_blobs::{
-    net_protocol::Blobs, ticket::BlobTicket, util::local_pool::LocalPool, BlobFormat,
-};
 
 use clap::Args;
 use tokio::sync::mpsc;
 
-use crate::common::{import, CommonArgs, SendStatus};
+use crate::common::CommonArgs;
 use std::{fs, path::PathBuf};
 
 #[derive(Debug, Args)]

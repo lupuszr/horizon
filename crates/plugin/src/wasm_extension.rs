@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use anyhow::anyhow;
 use horizon_core::iroh::{
     common::{DocsClient, IrohState},
-    document::{AddrInfoOptions, DocTicket, NamespaceId, NamespacePublicKey, Query, ShareMode},
+    document::{AddrInfoOptions, DocTicket, NamespaceId, Query, ShareMode},
 };
 use wasmtime::component::Resource;
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiView};
@@ -57,7 +57,7 @@ impl WasiHttpView for WasmState {
 }
 
 impl horizon::extension::network::Host for WasmState {}
-type DocumentId = String;
+
 impl horizon::extension::network::HostDocument for WasmState {
     async fn new(&mut self) -> wasmtime::Result<Resource<HorizonDocument>> {
         let iroh_docs = self.iroh_state.docs.clone();
@@ -144,9 +144,10 @@ impl horizon::extension::network::HostDocument for WasmState {
 
         Ok(())
     }
+
     async fn drop(
         &mut self,
-        rep: wasmtime::component::Resource<HorizonDocument>,
+        #[allow(unused_variables)] _: wasmtime::component::Resource<HorizonDocument>,
     ) -> wasmtime::Result<()> {
         Ok(())
     }

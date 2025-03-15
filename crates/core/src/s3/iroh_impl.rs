@@ -83,8 +83,8 @@ impl HorizonSystem {
 
     pub fn sync_buckets(&self) -> Result<(), AppError> {
         let HorizonSystem { iroh_state, .. } = self;
-        let IrohState { docs, .. } = iroh_state;
-        // docs.
+        let IrohState { .. } = iroh_state;
+
         Ok(())
     }
 

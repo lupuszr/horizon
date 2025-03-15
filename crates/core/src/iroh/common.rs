@@ -258,7 +258,7 @@ impl IrohState {
         })
     }
 
-    pub(crate) async fn shutdown(self) -> Result<()> {
-        self.router.shutdown().await
-    }
+    // pub(crate) async fn shutdown(self) -> Result<()> {
+    //     self.router.shutdown().await
+    // }
 }
