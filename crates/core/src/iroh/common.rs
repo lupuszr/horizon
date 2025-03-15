@@ -5,8 +5,10 @@ use iroh_base::SecretKey;
 use iroh_blobs::{
     format::collection::Collection,
     net_protocol::Blobs,
+    rpc::client::blobs,
     store::{fs::Store, ExportMode},
 };
+use iroh_docs::rpc::client::docs::{self};
 use std::{
     fmt::{Display, Formatter},
     net::{SocketAddrV4, SocketAddrV6},
@@ -19,14 +21,9 @@ use tokio::sync::mpsc;
 use anyhow::Result;
 use iroh::protocol::Router;
 use iroh_blobs::util::local_pool::LocalPool;
-use quic_rpc::transport::flume::FlumeConnector;
 
-pub type BlobsClient = iroh_blobs::rpc::client::blobs::Client<
-    FlumeConnector<iroh_blobs::rpc::proto::Response, iroh_blobs::rpc::proto::Request>,
->;
-pub type DocsClient = iroh_docs::rpc::client::docs::Client<
-    FlumeConnector<iroh_docs::rpc::proto::Response, iroh_docs::rpc::proto::Request>,
->;
+pub type BlobsClient = blobs::MemClient;
+pub type DocsClient = docs::MemClient;
 use crate::{errors::AppError, event::HorizonChannel};
 
 use super::client_status::IrohClientStatus;
@@ -227,7 +224,7 @@ impl IrohState {
             .await
             .map_err(|err| AppError::IrohBlobStoreError(err.to_string()))?
             .events(client_status.into())
-            .build(&local_pool.handle(), builder.endpoint());
+            .build(builder.endpoint());
 
         builder = builder.accept(iroh_blobs::ALPN, blobs.clone());
 

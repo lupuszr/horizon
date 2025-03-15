@@ -42,7 +42,7 @@ quic-rpc = { workspace = true }
 iroh-docs = { workspace = true }
 iroh-blobs = { workspace = true }
 iroh-gossip = { workspace = true }
-iroh-node-util = "0.30"
+iroh-node-util = { workspace = true }
 walkdir = { workspace = true }
 tokio-util = { workspace = true }
 tokio-stream = { workspace = true }

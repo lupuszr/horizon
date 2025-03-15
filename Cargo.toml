@@ -57,15 +57,15 @@ serde_cbor = "0.11.2"
 clap = { version = "4.5.8", features = ["derive", "env"] }
 
 # Storage and networking
-iroh = "0.30.0"
-iroh-base = "0.30.0"
+iroh = "0.33.0"
+iroh-base = "0.33.0"
 quiche = "0.20"
 walkdir = "2.4.0"
 quic-rpc = { version = "0.17" }
-iroh-docs = { version = "0.30", features = ["rpc"] }
-iroh-blobs = { version = "0.30", features = ["rpc"] }
-iroh-gossip = { version = "0.30", features = ["rpc"] }
-iroh-node-util = "0.30"
+iroh-docs = { version = "0.33", features = ["rpc"] }
+iroh-blobs = { version = "0.33", features = ["rpc"] }
+iroh-gossip = { version = "0.33", features = ["rpc"] }
+iroh-node-util = "0.33"
 
 
 # IPFS related
