@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use std::env;
 use std::fs;
-use std::sync::Arc;
+use std::time::Duration;
 
 use aws_config::SdkConfig;
 use aws_credential_types::provider::SharedCredentialsProvider;
@@ -227,27 +227,42 @@ async fn test_single_object() -> Result<()> {
     Ok(())
 }
 
+/// Tests that an object uploaded to one node in a multi-node S3-like storage system
+/// can be correctly retrieved from another node after synchronization.
+///
+/// ## Test Workflow:
+/// 1. Create two independent storage nodes with separate file system roots.
+/// 2. Initialize S3 clients (`client1` and `client2`) for each node.
+/// 3. Create a unique bucket on `client1` and upload a sample object (`sample.txt`).
+/// 4. Verify that the object is stored with the correct metadata and checksum.
+/// 5. Share the bucket from `node1` to `node2` using a ticket-based mechanism.
+/// 6. Import the shared bucket on `node2` and wait for synchronization to complete.
+/// 7. Retrieve the object from `client2` and validate:
+///    - Content length matches.
+///    - Metadata is correctly transferred.
+///    - Checksum integrity is preserved.
 #[tokio::test]
-async fn test_multinode_object_fetch() -> Result<()> {
-    const FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-node-1");
-    const FS_ROOT2: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-node-2");
-    let (cfg, hs1) = config(FS_ROOT).await;
-    let c1 = Client::new(&cfg);
+async fn test_multinode_object_sync_and_fetch() -> Result<()> {
+    const NODE1_FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-node-1a");
+    const NODE2_FS_ROOT2: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-node-2a");
+    let (node1_cfg, node1_handle) = config(NODE1_FS_ROOT).await;
+    let client1 = Client::new(&node1_cfg);
 
-    let (cfg, hs2) = config(FS_ROOT2).await;
-    let c2 = Client::new(&cfg);
+    let (node2_cfg, node2_handle) = config(NODE2_FS_ROOT2).await;
+    let client2 = Client::new(&node2_cfg);
 
-    let bucket = format!("test-object-download-{}", Uuid::new_v4());
-    let bucket = bucket.as_str();
+    let bucket_name = format!("multinode-sync-test-{}", Uuid::new_v4());
+    let bucket = bucket_name.as_str();
     let key = "sample.txt";
     let content = "hello world\n你好世界\n";
     let crc32c =
         base64_simd::STANDARD.encode_to_string(crc32c::crc32c(content.as_bytes()).to_be_bytes());
 
-    create_bucket(&c1, bucket).await?;
+    create_bucket(&client1, bucket).await?;
     {
         let body = ByteStream::from_static(content.as_bytes());
-        c1.put_object()
+        client1
+            .put_object()
             .bucket(bucket)
             .key(key)
             .body(body)
@@ -257,20 +272,24 @@ async fn test_multinode_object_fetch() -> Result<()> {
             .await?;
     }
 
-    let ticket = hs1.share_bucket(bucket.to_string()).await.unwrap();
-    let mut events = hs2.import_bucket(ticket).await.unwrap();
-    loop {
-        let Some(Ok(ev)) = events.next().await else {
-            break;
-        };
-        match ev {
-            iroh_docs::engine::LiveEvent::SyncFinished(_sync_event) => break,
-            _ => continue,
+    // share bucket
+    let ticket = node1_handle.share_bucket(bucket.to_string()).await.unwrap();
+    // import on other node
+    let mut events = node2_handle.import_bucket(ticket).await.unwrap();
+    // wait for sync
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while let Some(Ok(ev)) = events.next().await {
+            if matches!(ev, iroh_docs::engine::LiveEvent::SyncFinished(_)) {
+                println!("match?");
+                break;
+            }
         }
-    }
+    })
+    .await
+    .expect("Sync took too long");
 
     {
-        let ans = c2
+        let ans = client2
             .get_object()
             .bucket(bucket)
             .key(key)
@@ -285,6 +304,13 @@ async fn test_multinode_object_fetch() -> Result<()> {
         assert_eq!(content_length, content.len());
         assert_eq!(metadata.get("meta"), Some(&("pig".to_string())));
         assert_eq!(body.as_ref(), content.as_bytes());
+    }
+
+    {
+        // delete_object(&client1, bucket, key).await?;
+        delete_bucket(&client1, bucket).await?;
+        delete_object(&client2, bucket, key).await?;
+        delete_bucket(&client2, bucket).await?;
     }
 
     Ok(())
