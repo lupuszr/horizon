@@ -75,66 +75,176 @@ impl NamespaceLookupTable {
         Ok(())
     }
 
-    pub fn query_read_tickets(&self, query: TicketQuery) -> HashMap<String, String> {
+    pub fn query_write_tickets(&self, query: TicketQuery) -> HashMap<String, String> {
         match query {
             TicketQuery::One(document_id) => {
-                // Return a single ticket by document_id
-                self.document_read_ticket
+                // Return a single ticket by document_id, but expose the bucket_name instead
+                self.document_write_ticket
                     .iter()
                     .filter(|(key, _)| *key == &document_id)
-                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .map(|(key, value)| {
+                        // Find the bucket name associated with the document_id
+                        let bucket_name = self
+                            .get_by_document_id(key)
+                            .cloned()
+                            .unwrap_or_else(|| "No such bucket".to_string())
+                            .to_owned();
+                        (bucket_name, value.clone())
+                    })
                     .collect()
             }
             TicketQuery::Many(document_ids) => {
-                // Return tickets for multiple document IDs
+                // Return tickets for multiple document IDs, but expose the bucket_names instead
                 document_ids
                     .iter()
                     .filter_map(|id| {
-                        self.document_read_ticket
-                            .get(id)
-                            .map(|ticket| (id.clone(), ticket.clone()))
+                        self.document_write_ticket.get(id).map(|ticket| {
+                            let bucket_name = self
+                                .get_by_document_id(id)
+                                .cloned()
+                                .unwrap_or_else(|| "No such bucket".to_string())
+                                .to_owned();
+                            (bucket_name, ticket.clone())
+                        })
                     })
                     .collect()
             }
             TicketQuery::All => {
-                // Return all read tickets
-                self.document_read_ticket.clone()
+                // Return all read tickets, but expose the bucket_names instead of document_ids
+                self.document_write_ticket
+                    .iter()
+                    .map(|(doc_id, ticket)| {
+                        let bucket_name = self
+                            .get_by_document_id(doc_id)
+                            .cloned()
+                            .unwrap_or_else(|| ("No such bucket".to_string()));
+                        (bucket_name, ticket.clone())
+                    })
+                    .collect()
             }
             TicketQuery::ByBucket(bucket_name) => {
-                // Query for read ticket by bucket name
+                // Query for read ticket by bucket name, expose the bucket name in result
                 if let Some(document_id) = self.get_by_bucket_name(&bucket_name) {
-                    self.document_read_ticket
+                    self.document_write_ticket
                         .iter()
                         .filter(|(key, _)| *key == document_id)
-                        .map(|(key, value)| (key.clone(), value.clone()))
+                        .map(|(_, value)| (bucket_name.clone(), value.clone()))
                         .collect()
                 } else {
                     HashMap::new()
                 }
             }
             TicketQuery::ByBuckets(bucket_names) => {
-                // Query for read tickets by multiple bucket names
+                // Query for read tickets by multiple bucket names, expose the bucket names in result
                 bucket_names
                     .iter()
                     .filter_map(|bucket_name| {
                         self.get_by_bucket_name(bucket_name).map(|document_id| {
-                            self.document_read_ticket
+                            self.document_write_ticket
                                 .get(document_id)
-                                .map(|ticket| (document_id.clone(), ticket.clone()))
+                                .map(|ticket| (bucket_name.clone(), ticket.clone()))
                         })
                     })
                     .flatten()
                     .collect()
             }
             TicketQuery::ByBucketPrefix(prefix) => {
-                // Query for read tickets by bucket name prefix
+                // Query for read tickets by bucket name prefix, expose the bucket names in result
                 self.bucket_to_document
                     .iter()
                     .filter(|(bucket_name, _)| bucket_name.starts_with(&prefix))
-                    .filter_map(|(_bucket_name, document_id)| {
+                    .filter_map(|(bucket_name, document_id)| {
+                        self.document_write_ticket
+                            .get(document_id)
+                            .map(|ticket| (bucket_name.clone(), ticket.clone()))
+                    })
+                    .collect()
+            }
+        }
+    }
+
+    pub fn query_read_tickets(&self, query: TicketQuery) -> HashMap<String, String> {
+        match query {
+            TicketQuery::One(document_id) => {
+                // Return a single ticket by document_id, but expose the bucket_name instead
+                self.document_read_ticket
+                    .iter()
+                    .filter(|(key, _)| *key == &document_id)
+                    .map(|(key, value)| {
+                        // Find the bucket name associated with the document_id
+                        let bucket_name = self
+                            .get_by_document_id(key)
+                            .cloned()
+                            .unwrap_or_else(|| "No such bucket".to_string())
+                            .to_owned();
+                        (bucket_name, value.clone())
+                    })
+                    .collect()
+            }
+            TicketQuery::Many(document_ids) => {
+                // Return tickets for multiple document IDs, but expose the bucket_names instead
+                document_ids
+                    .iter()
+                    .filter_map(|id| {
+                        self.document_read_ticket.get(id).map(|ticket| {
+                            let bucket_name = self
+                                .get_by_document_id(id)
+                                .cloned()
+                                .unwrap_or_else(|| "No such bucket".to_string())
+                                .to_owned();
+                            (bucket_name, ticket.clone())
+                        })
+                    })
+                    .collect()
+            }
+            TicketQuery::All => {
+                // Return all read tickets, but expose the bucket_names instead of document_ids
+                self.document_read_ticket
+                    .iter()
+                    .map(|(doc_id, ticket)| {
+                        let bucket_name = self
+                            .get_by_document_id(doc_id)
+                            .cloned()
+                            .unwrap_or_else(|| ("No such bucket".to_string()));
+                        (bucket_name, ticket.clone())
+                    })
+                    .collect()
+            }
+            TicketQuery::ByBucket(bucket_name) => {
+                // Query for read ticket by bucket name, expose the bucket name in result
+                if let Some(document_id) = self.get_by_bucket_name(&bucket_name) {
+                    self.document_read_ticket
+                        .iter()
+                        .filter(|(key, _)| *key == document_id)
+                        .map(|(_, value)| (bucket_name.clone(), value.clone()))
+                        .collect()
+                } else {
+                    HashMap::new()
+                }
+            }
+            TicketQuery::ByBuckets(bucket_names) => {
+                // Query for read tickets by multiple bucket names, expose the bucket names in result
+                bucket_names
+                    .iter()
+                    .filter_map(|bucket_name| {
+                        self.get_by_bucket_name(bucket_name).map(|document_id| {
+                            self.document_read_ticket
+                                .get(document_id)
+                                .map(|ticket| (bucket_name.clone(), ticket.clone()))
+                        })
+                    })
+                    .flatten()
+                    .collect()
+            }
+            TicketQuery::ByBucketPrefix(prefix) => {
+                // Query for read tickets by bucket name prefix, expose the bucket names in result
+                self.bucket_to_document
+                    .iter()
+                    .filter(|(bucket_name, _)| bucket_name.starts_with(&prefix))
+                    .filter_map(|(bucket_name, document_id)| {
                         self.document_read_ticket
                             .get(document_id)
-                            .map(|ticket| (document_id.clone(), ticket.clone()))
+                            .map(|ticket| (bucket_name.clone(), ticket.clone()))
                     })
                     .collect()
             }

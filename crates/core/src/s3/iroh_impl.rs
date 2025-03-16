@@ -27,7 +27,13 @@ use crate::event::HorizonChannel;
 use crate::iroh::common::IrohState;
 use crate::s3::helpers::{adapt_stream, fmt_content_range, reader_to_streaming_blob};
 
-use super::namespace_lookup_table::NamespaceLookupTable;
+use super::namespace_lookup_table::{NamespaceLookupTable, TicketQuery};
+
+#[derive(Debug, Clone)]
+pub enum SharePermission {
+    Read,
+    Write,
+}
 
 #[derive(Debug, Clone)]
 pub struct HorizonSystem {
@@ -54,6 +60,50 @@ impl HorizonSystem {
             iroh_state,
             namespace_table: Arc::new(RwLock::new(NamespaceLookupTable::new())),
         })
+    }
+
+    // Insert the read ticket for a document by its bucket name
+    async fn insert_read_ticket_by_bucket(&self, bucket_name: String) -> Result<(), AppError> {
+        let HorizonSystem {
+            namespace_table, ..
+        } = self;
+
+        // Get the ticket by calling share_bucket with Read permission
+        let HorizonS3BucketTicket {
+            bucket_name,
+            ticket,
+        } = self
+            .share_bucket(bucket_name, SharePermission::Read)
+            .await
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+        // Acquire write lock and insert the ticket into the namespace table
+        let mut lock = namespace_table.write()?;
+        lock.insert_read_ticket_by_bucket(&bucket_name, ticket.to_string())?;
+
+        Ok(())
+    }
+
+    // Insert the write ticket for a document by its bucket name
+    async fn insert_write_ticket_by_bucket(&self, bucket_name: String) -> Result<(), AppError> {
+        let HorizonSystem {
+            namespace_table, ..
+        } = self;
+
+        // Get the ticket by calling share_bucket with Read permission
+        let HorizonS3BucketTicket {
+            bucket_name,
+            ticket,
+        } = self
+            .share_bucket(bucket_name, SharePermission::Write)
+            .await
+            .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+        // Acquire write lock and insert the ticket into the namespace table
+        let mut lock = namespace_table.write()?;
+        lock.insert_write_ticket_by_bucket(&bucket_name, ticket.to_string())?;
+
+        Ok(())
     }
 
     pub fn link_bucket_name_with_doc_id(
@@ -116,7 +166,11 @@ impl HorizonSystem {
         Ok(stream)
     }
 
-    pub async fn share_bucket(&self, bucket: String) -> Result<HorizonS3BucketTicket, AppError> {
+    pub async fn share_bucket(
+        &self,
+        bucket: String,
+        permission: SharePermission,
+    ) -> Result<HorizonS3BucketTicket, AppError> {
         let HorizonSystem { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
 
@@ -136,9 +190,14 @@ impl HorizonSystem {
             return Err(AppError::S3NoBucket);
         };
 
+        let share_mode = match permission {
+            SharePermission::Read => iroh_docs::rpc::client::docs::ShareMode::Read,
+            SharePermission::Write => iroh_docs::rpc::client::docs::ShareMode::Write,
+        };
+
         let ticket = bucket_doc
             .share(
-                iroh_docs::rpc::client::docs::ShareMode::Write,
+                share_mode,
                 iroh_docs::rpc::AddrInfoOptions::RelayAndAddresses,
             )
             .await
@@ -148,6 +207,73 @@ impl HorizonSystem {
             bucket_name: bucket,
             ticket,
         })
+    }
+
+    pub async fn share_buckets(
+        &self,
+        ticket_query: TicketQuery,
+        permission: SharePermission,
+    ) -> Result<Vec<HorizonS3BucketTicket>, AppError> {
+        let HorizonSystem {
+            namespace_table, ..
+        } = self;
+        // let IrohState { docs, .. } = iroh_state;
+
+        // let doc = docs
+        //     .create()
+        //     .await
+        //     .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+        let ns_table = namespace_table.clone();
+        let ns_table = ns_table.read()?;
+        let tickets = match permission {
+            SharePermission::Read => ns_table.query_read_tickets(ticket_query),
+            SharePermission::Write => ns_table.query_read_tickets(ticket_query),
+        };
+
+        let tickets: Vec<_> = tickets
+            .iter()
+            .map(|(k, v)| HorizonS3BucketTicket {
+                bucket_name: k.clone(),
+                ticket: DocTicket::from_str(v).unwrap(),
+            })
+            .collect();
+
+        Ok(tickets)
+    }
+
+    pub async fn import_buckets(
+        &self,
+        bucket_tickets: Vec<HorizonS3BucketTicket>,
+    ) -> Result<Vec<impl Stream<Item = anyhow::Result<LiveEvent>>>, AppError> {
+        let HorizonSystem { iroh_state, .. } = self;
+        let IrohState { docs, .. } = iroh_state;
+
+        let mut bucket_import_streams = vec![];
+
+        for bucket_ticket in bucket_tickets.iter() {
+            let HorizonS3BucketTicket {
+                bucket_name,
+                ticket,
+            } = bucket_ticket;
+            let document_id = self
+                .get_id_by_bucket_name(bucket_name.clone())
+                .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+            let None = document_id else {
+                return Err(AppError::S3BucketExists);
+            };
+            let (doc, stream) = docs
+                .import_and_subscribe(ticket.clone())
+                .await
+                .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+            self.link_bucket_name_with_doc_id(doc.id().to_string(), bucket_name.clone())
+                .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
+
+            bucket_import_streams.push(stream);
+        }
+
+        Ok(bucket_import_streams)
     }
 }
 
@@ -175,7 +301,13 @@ impl S3 for HorizonSystem {
             .await
             .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
 
-        self.link_bucket_name_with_doc_id(doc.id().to_string(), bucket_name)
+        self.link_bucket_name_with_doc_id(doc.id().to_string(), bucket_name.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        self.insert_read_ticket_by_bucket(bucket_name.clone())
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        self.insert_write_ticket_by_bucket(bucket_name)
+            .await
             .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
 
         let output = CreateBucketOutput {

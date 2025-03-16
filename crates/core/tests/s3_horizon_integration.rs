@@ -285,7 +285,13 @@ async fn test_multinode_object_sync_and_fetch() -> Result<()> {
     }
 
     // share bucket
-    let ticket = node1_handle.share_bucket(bucket.to_string()).await.unwrap();
+    let ticket = node1_handle
+        .share_bucket(
+            bucket.to_string(),
+            horizon_core::s3::iroh_impl::SharePermission::Write,
+        )
+        .await
+        .unwrap();
     // import on other node
     let mut events = node2_handle.import_bucket(ticket).await.unwrap();
     // wait for sync
