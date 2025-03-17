@@ -1,5 +1,7 @@
 use futures::StreamExt;
-use horizon_core::s3::iroh_impl::HorizonSystem;
+use horizon_core::s3::iroh_impl::HorizonS3System;
+use horizon_core::s3::iroh_impl::SharePermission;
+use horizon_core::s3::namespace_lookup_table::TicketQuery;
 use s3s::auth::SimpleAuth;
 use s3s::host::SingleDomain;
 use s3s::service::S3ServiceBuilder;
@@ -29,7 +31,7 @@ const FS_ROOT: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/s3s-fs-tests-aws");
 const DOMAIN_NAME: &str = "localhost:8014";
 const REGION: &str = "us-west-2";
 
-async fn config(node_path: &str) -> (SdkConfig, HorizonSystem) {
+async fn config(node_path: &str) -> (SdkConfig, HorizonS3System) {
     // Fake credentials
     let cred = Credentials::for_tests();
 
@@ -37,7 +39,7 @@ async fn config(node_path: &str) -> (SdkConfig, HorizonSystem) {
     fs::create_dir_all(FS_ROOT).unwrap();
     let (tx_send, _rx_sender) = mpsc::channel(100);
 
-    let hs = HorizonSystem::new(node_path, tx_send).await.unwrap();
+    let hs = HorizonS3System::new(node_path, tx_send).await.unwrap();
 
     // Setup S3 service
     let service = {

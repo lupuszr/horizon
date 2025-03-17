@@ -36,7 +36,7 @@ pub enum SharePermission {
 }
 
 #[derive(Debug, Clone)]
-pub struct HorizonSystem {
+pub struct HorizonS3System {
     iroh_state: IrohState,
     // TODO: we need to find a proper way to store the linking
     pub namespace_table: Arc<RwLock<NamespaceLookupTable>>,
@@ -47,16 +47,16 @@ pub struct HorizonS3BucketTicket {
     pub ticket: DocTicket,
 }
 
-impl HorizonSystem {
+impl HorizonS3System {
     pub async fn new(
         base_path: &str,
         tx: Sender<HorizonChannel>,
-    ) -> Result<HorizonSystem, AppError> {
+    ) -> Result<HorizonS3System, AppError> {
         let path =
             PathBuf::from_str(base_path).map_err(|err| AppError::PathError(err.to_string()))?;
         let iroh_state = IrohState::new(path, tx).await?;
 
-        Ok(HorizonSystem {
+        Ok(HorizonS3System {
             iroh_state,
             namespace_table: Arc::new(RwLock::new(NamespaceLookupTable::new())),
         })
@@ -64,7 +64,7 @@ impl HorizonSystem {
 
     // Insert the read ticket for a document by its bucket name
     async fn insert_read_ticket_by_bucket(&self, bucket_name: String) -> Result<(), AppError> {
-        let HorizonSystem {
+        let HorizonS3System {
             namespace_table, ..
         } = self;
 
@@ -86,7 +86,7 @@ impl HorizonSystem {
 
     // Insert the write ticket for a document by its bucket name
     async fn insert_write_ticket_by_bucket(&self, bucket_name: String) -> Result<(), AppError> {
-        let HorizonSystem {
+        let HorizonS3System {
             namespace_table, ..
         } = self;
 
@@ -111,7 +111,7 @@ impl HorizonSystem {
         doc_id: String,
         bucket_name: String,
     ) -> Result<(), AppError> {
-        let HorizonSystem {
+        let HorizonS3System {
             namespace_table, ..
         } = self;
         let mut lock = namespace_table.write()?;
@@ -132,7 +132,7 @@ impl HorizonSystem {
     }
 
     pub fn sync_buckets(&self) -> Result<(), AppError> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { .. } = iroh_state;
 
         Ok(())
@@ -142,7 +142,7 @@ impl HorizonSystem {
         &self,
         bucket_ticket: HorizonS3BucketTicket,
     ) -> Result<impl Stream<Item = anyhow::Result<LiveEvent>>, AppError> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
         let HorizonS3BucketTicket {
             bucket_name,
@@ -171,7 +171,7 @@ impl HorizonSystem {
         bucket: String,
         permission: SharePermission,
     ) -> Result<HorizonS3BucketTicket, AppError> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
 
         let document_id = self
@@ -214,7 +214,7 @@ impl HorizonSystem {
         ticket_query: TicketQuery,
         permission: SharePermission,
     ) -> Result<Vec<HorizonS3BucketTicket>, AppError> {
-        let HorizonSystem {
+        let HorizonS3System {
             namespace_table, ..
         } = self;
         // let IrohState { docs, .. } = iroh_state;
@@ -246,7 +246,7 @@ impl HorizonSystem {
         &self,
         bucket_tickets: Vec<HorizonS3BucketTicket>,
     ) -> Result<Vec<impl Stream<Item = anyhow::Result<LiveEvent>>>, AppError> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
 
         let mut bucket_import_streams = vec![];
@@ -278,14 +278,14 @@ impl HorizonSystem {
 }
 
 #[async_trait::async_trait]
-impl S3 for HorizonSystem {
+impl S3 for HorizonS3System {
     async fn create_bucket(
         &self,
         req: S3Request<CreateBucketInput>,
     ) -> S3Result<S3Response<CreateBucketOutput>> {
         let input = req.input;
         let bucket_name = input.bucket;
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
 
         if self
@@ -328,7 +328,7 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<DeleteBucketInput>,
     ) -> S3Result<S3Response<DeleteBucketOutput>> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
         let input = req.input;
         let bucket = input.bucket;
@@ -355,7 +355,7 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<DeleteObjectInput>,
     ) -> S3Result<S3Response<DeleteObjectOutput>> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, blobs, .. } = iroh_state;
         let input = req.input;
         let bucket = input.bucket;
@@ -426,7 +426,7 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<GetObjectInput>,
     ) -> S3Result<S3Response<GetObjectOutput>> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, blobs, .. } = iroh_state;
         let input = req.input;
         let bucket = input.bucket;
@@ -530,7 +530,7 @@ impl S3 for HorizonSystem {
         &self,
         _: S3Request<ListBucketsInput>,
     ) -> S3Result<S3Response<ListBucketsOutput>> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
 
         let mut buckets: Vec<Bucket> = Vec::new();
@@ -574,7 +574,7 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<ListObjectsV2Input>,
     ) -> S3Result<S3Response<ListObjectsV2Output>> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, .. } = iroh_state;
         let input = req.input;
         let bucket = input.bucket;
@@ -638,7 +638,7 @@ impl S3 for HorizonSystem {
         &self,
         req: S3Request<PutObjectInput>,
     ) -> S3Result<S3Response<PutObjectOutput>> {
-        let HorizonSystem { iroh_state, .. } = self;
+        let HorizonS3System { iroh_state, .. } = self;
         let IrohState { docs, blobs, .. } = iroh_state;
         let input = req.input;
         // TODO: add support for other storage class later`
