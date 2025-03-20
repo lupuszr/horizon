@@ -1,12 +1,13 @@
 [workspace]
 members = [
-    # "crates/api",
+    "crates/api",
     "crates/storage",
     # "crates/auth",
     "crates/core",
     "crates/plugin",
     "crates/apps/horizon-push/src-tauri",
     "crates/apps/horizon-push/src-cli",
+    "crates/apps/horizon-server",
 ]
 resolver = "2"
 
@@ -25,7 +26,7 @@ panic = "abort"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["vikpelle@gmail.com"]
+authors = ["lupuszr <vikpelle@gmail.com>"]
 
 
 [workspace.dependencies]
@@ -35,6 +36,8 @@ tokio = { version = "1.36", features = ["full"] }
 axum = { version = "0.7", features = ["multipart"] }
 tower = "0.4"
 hyper = { version = "1.6.0" }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "http1"] }
+
 async-trait = "0.1.83"
 tower-http = { version = "0.5", features = ["trace", "cors"] }
 futures = "0.3.31"
@@ -109,8 +112,10 @@ dirs-next = "2.0.0"
 uuid = { version = "1.7", features = ["v4", "serde"] }
 
 # S3 support
-s3s = { git = "https://github.com/Nugine/s3s", version = "0.11.0-dev" }
-s3s-aws = { git = "https://github.com/Nugine/s3s", version = "0.11.0-dev" }
+s3s = { git = "https://github.com/Nugine/s3s", branch = "main", features = [
+    "tower",
+] }
+s3s-aws = { git = "https://github.com/Nugine/s3s", branch = "main" }
 aws-sdk-s3 = "1.78.0"
 aws-config = { version = "1.5.18", default-features = false }
 aws-credential-types = { version = "1.2.1", features = ["test-util"] }

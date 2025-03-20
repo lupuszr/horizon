@@ -4,6 +4,7 @@ use iroh_blobs::rpc::client::blobs::AddOutcome;
 use iroh_docs::engine::LiveEvent;
 use iroh_docs::store::Query;
 use iroh_docs::{CapabilityKind, DocTicket, NamespaceId};
+use serde::{Deserialize, Serialize};
 
 use std::collections::HashMap;
 
@@ -29,7 +30,7 @@ use crate::s3::helpers::{adapt_stream, fmt_content_range, reader_to_streaming_bl
 
 use super::namespace_lookup_table::{NamespaceLookupTable, TicketQuery};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum SharePermission {
     Read,
     Write,
@@ -42,6 +43,7 @@ pub struct HorizonS3System {
     pub namespace_table: Arc<RwLock<NamespaceLookupTable>>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HorizonS3BucketTicket {
     pub bucket_name: String,
     pub ticket: DocTicket,
@@ -60,6 +62,13 @@ impl HorizonS3System {
             iroh_state,
             namespace_table: Arc::new(RwLock::new(NamespaceLookupTable::new())),
         })
+    }
+
+    pub fn new_with_iroh(iroh_state: IrohState) -> HorizonS3System {
+        HorizonS3System {
+            iroh_state,
+            namespace_table: Arc::new(RwLock::new(NamespaceLookupTable::new())),
+        }
     }
 
     // Insert the read ticket for a document by its bucket name
@@ -217,12 +226,6 @@ impl HorizonS3System {
         let HorizonS3System {
             namespace_table, ..
         } = self;
-        // let IrohState { docs, .. } = iroh_state;
-
-        // let doc = docs
-        //     .create()
-        //     .await
-        //     .map_err(|err| AppError::IrohDocsError(err.to_string()))?;
 
         let ns_table = namespace_table.clone();
         let ns_table = ns_table.read()?;
