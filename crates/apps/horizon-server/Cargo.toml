@@ -1,0 +1,57 @@
+[package]
+name = "horizon-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "horizon-cli"
+path = "main.rs"
+
+
+[dependencies]
+# Core dependencies from workspace
+tokio = { workspace = true }
+iroh = { workspace = true }
+iroh-base = { workspace = true }
+walkdir = { workspace = true }
+iroh-blobs = { workspace = true }
+async-trait = { workspace = true }
+tokio-util = { workspace = true }
+tokio-stream = { workspace = true }
+async-channel = { workspace = true }
+futures-buffered = { workspace = true }
+futures-lite = { workspace = true }
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+data-encoding = { workspace = true }
+chrono.workspace = true
+
+# Errors
+thiserror = { workspace = true }
+
+# cli
+clap = { workspace = true }
+
+# console utils
+console = { workspace = true }
+indicatif = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# randomness
+rand = { workspace = true } # Utilities
+
+bytes = "1.5"
+base64 = "0.21"
+tempfile = "3.10"
+dirs-next = { workspace = true }
+
+num_cpus = { workspace = true }
+
+# Local crates
+horizon-core = { path = "../../core" }
+horizon-api = { path = "../../api" }
