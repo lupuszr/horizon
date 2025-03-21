@@ -61,7 +61,7 @@ indicatif = { workspace = true }
 std-next = { workspace = true }
 
 # S3
-s3s = { workspace = true }
+s3s = { workspace = true, features = ["tower"] }
 s3s-aws = { workspace = true }
 aws-sdk-s3 = { workspace = true, features = ["behavior-version-latest"] }
 aws-config = { workspace = true }
