@@ -34,12 +34,12 @@ authors = ["lupuszr <vikpelle@gmail.com>"]
 tokio = { version = "1.36", features = ["full"] }
 # tokio = { version = "1.43", features = ["sync", "macros", "io-util", "rt", "time"] }
 axum = { version = "0.7", features = ["multipart"] }
-tower = "0.4"
+tower = "0.5.2"
 hyper = { version = "1.6.0" }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "http1"] }
 
 async-trait = "0.1.83"
-tower-http = { version = "0.5", features = ["trace", "cors"] }
+tower-http = { version = "0.6.2", features = ["trace", "cors"] }
 futures = "0.3.31"
 tokio-util = { version = "0.7", features = ["io"] }
 tokio-stream = "0.1"
