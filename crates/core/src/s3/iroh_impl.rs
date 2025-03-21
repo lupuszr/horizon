@@ -282,6 +282,23 @@ impl HorizonS3System {
 
 #[async_trait::async_trait]
 impl S3 for HorizonS3System {
+    async fn head_bucket(&self, req: S3Request<HeadBucketInput>) -> S3Result<S3Response<HeadBucketOutput>> {
+        let input = req.input;
+        let bucket_name = input.bucket;
+        let HorizonS3System { iroh_state, .. } = self;
+        let IrohState { docs, .. } = iroh_state;
+
+        if self
+            .get_id_by_bucket_name(bucket_name.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?
+            .is_none()
+        {
+            return Err(s3_error!(NoSuchBucket));
+        }
+
+        Ok(S3Response::new(HeadBucketOutput::default()))
+    }
+
     async fn create_bucket(
         &self,
         req: S3Request<CreateBucketInput>,
