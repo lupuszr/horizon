@@ -5,8 +5,8 @@ edition.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "horizon-cli"
-path = "main.rs"
+name = "horizon-server"
+path = "src/main.rs"
 
 
 [dependencies]
