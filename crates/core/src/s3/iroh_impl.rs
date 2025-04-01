@@ -5,10 +5,9 @@ use iroh_docs::engine::LiveEvent;
 use iroh_docs::store::Query;
 use iroh_docs::{CapabilityKind, DocTicket, NamespaceId};
 use serde::{Deserialize, Serialize};
+use time::format_description::well_known::Rfc3339;
 
 use std::collections::HashMap;
-
-use stdx::default::default;
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -20,6 +19,7 @@ use s3s::S3ErrorCode;
 use s3s::S3Result;
 use s3s::S3;
 use s3s::{S3Request, S3Response};
+use time::OffsetDateTime;
 use tokio::sync::mpsc::Sender;
 
 use crate::errors::AppError;
@@ -29,6 +29,7 @@ use crate::iroh::common::IrohState;
 use crate::s3::helpers::{adapt_stream, fmt_content_range, reader_to_streaming_blob};
 
 use super::namespace_lookup_table::{NamespaceLookupTable, TicketQuery};
+use std::time::SystemTime;
 
 #[derive(Debug, Clone, Deserialize)]
 pub enum SharePermission {
@@ -234,15 +235,19 @@ impl HorizonS3System {
             SharePermission::Write => ns_table.query_read_tickets(ticket_query),
         };
 
-        let tickets: Vec<_> = tickets
+        let tickets: Result<Vec<_>, _> = tickets
             .iter()
-            .map(|(k, v)| HorizonS3BucketTicket {
-                bucket_name: k.clone(),
-                ticket: DocTicket::from_str(v).unwrap(),
+            .map(|(k, v)| {
+                DocTicket::from_str(v)
+                    .map(|ticket| HorizonS3BucketTicket {
+                        bucket_name: k.clone(),
+                        ticket,
+                    })
+                    .map_err(|err| AppError::IrohBlobTicketCreationError(err.to_string()))
             })
             .collect();
 
-        Ok(tickets)
+        tickets
     }
 
     pub async fn import_buckets(
@@ -282,11 +287,12 @@ impl HorizonS3System {
 
 #[async_trait::async_trait]
 impl S3 for HorizonS3System {
-    async fn head_bucket(&self, req: S3Request<HeadBucketInput>) -> S3Result<S3Response<HeadBucketOutput>> {
+    async fn head_bucket(
+        &self,
+        req: S3Request<HeadBucketInput>,
+    ) -> S3Result<S3Response<HeadBucketOutput>> {
         let input = req.input;
         let bucket_name = input.bucket;
-        let HorizonS3System { iroh_state, .. } = self;
-        let IrohState { docs, .. } = iroh_state;
 
         if self
             .get_id_by_bucket_name(bucket_name.clone())
@@ -509,19 +515,26 @@ impl S3 for HorizonS3System {
                 .await
                 .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
             let deserialized: HashMap<String, String> =
-                serde_cbor::from_slice(&metadata_content).unwrap();
+                serde_cbor::from_slice(&metadata_content)
+                    .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
 
             Some(deserialized)
         } else {
             None
         };
+        // TODO: fix
+        let object_metadata = object_metadata.unwrap();
+
+        let last_modified = object_metadata.get("LastModified");
+        let last_modified =
+            last_modified.and_then(|lm| LastModified::parse(TimestampFormat::DateTime, lm).ok());
 
         let output = GetObjectOutput {
             body: Some(blob),
             content_length: Some(content_length as i64),
             content_range,
-            // last_modified: Some(last_modified),
-            metadata: object_metadata,
+            last_modified,
+            metadata: Some(object_metadata),
             // e_tag: Some(e_tag),
             // checksum_crc32: checksum.checksum_crc32,
             // checksum_crc32c: checksum.checksum_crc32c,
@@ -532,18 +545,69 @@ impl S3 for HorizonS3System {
         Ok(S3Response::new(output))
     }
 
-    async fn head_bucket(
-        &self,
-        _req: S3Request<HeadBucketInput>,
-    ) -> S3Result<S3Response<HeadBucketOutput>> {
-        todo!()
-    }
-
     async fn head_object(
         &self,
-        _req: S3Request<HeadObjectInput>,
+        req: S3Request<HeadObjectInput>,
     ) -> S3Result<S3Response<HeadObjectOutput>> {
-        todo!()
+        let HorizonS3System { iroh_state, .. } = self;
+        let IrohState { docs, blobs, .. } = iroh_state;
+        let input = req.input;
+        let bucket = input.bucket;
+        let key = input.key;
+
+        let document_id = self
+            .get_id_by_bucket_name(bucket.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(document_id) = document_id else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+        let document_id = NamespaceId::from_str(document_id.as_str())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let bucket_doc = docs
+            .open(document_id)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let Some(bucket_doc) = bucket_doc else {
+            return Err(s3_error!(NoSuchBucket));
+        };
+
+        let metadata_query = Query::key_exact(format!("metadata::{}", key));
+
+        let metadata_entry = bucket_doc
+            .get_one(metadata_query)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let object_metadata = if let Some(meta) = metadata_entry {
+            let metadata_content = blobs
+                .read_to_bytes(meta.content_hash())
+                .await
+                .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+            let deserialized: HashMap<String, String> =
+                serde_cbor::from_slice(&metadata_content)
+                    .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+            Some(deserialized)
+        } else {
+            None
+        };
+
+        let object_metadata = object_metadata
+            .to_owned()
+            .ok_or(S3ErrorCode::Custom("Unwrap failed".into()))?;
+
+        let last_modified = object_metadata.get("LastModified");
+        let last_modified =
+            last_modified.and_then(|lm| LastModified::parse(TimestampFormat::DateTime, lm).ok());
+
+        let output = HeadObjectOutput {
+            // content_length: Some(try_!(i64::try_from(file_len))),
+            // content_type: Some(content_type),
+            last_modified,
+            metadata: Some(object_metadata),
+            ..Default::default()
+        };
+        Ok(S3Response::new(output))
     }
 
     async fn list_buckets(
@@ -566,12 +630,12 @@ impl S3 for HorizonS3System {
             let name = self
                 .get_bucket_name_by_id(id.to_string())
                 .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
-
+            let now = SystemTime::now();
             let bucket = Bucket {
                 name,
+                creation_date: Some(Timestamp::from(now)),
                 ..Default::default()
             };
-
             buckets.push(bucket);
         }
 
@@ -590,6 +654,31 @@ impl S3 for HorizonS3System {
         todo!()
     }
 
+    #[tracing::instrument]
+    async fn list_parts(
+        &self,
+        req: S3Request<ListPartsInput>,
+    ) -> S3Result<S3Response<ListPartsOutput>> {
+        let ListPartsInput {
+            bucket,
+            key,
+            upload_id,
+            ..
+        } = req.input;
+
+        let parts: Vec<Part> = Vec::new();
+        // TODO: implement
+        let _output = ListPartsOutput {
+            bucket: Some(bucket),
+            key: Some(key),
+            upload_id: Some(upload_id),
+            parts: Some(parts),
+            ..Default::default()
+        };
+        // Ok(S3Response::new(output))
+        todo!()
+    }
+
     async fn list_objects_v2(
         &self,
         req: S3Request<ListObjectsV2Input>,
@@ -601,19 +690,17 @@ impl S3 for HorizonS3System {
 
         let document_id = self
             .get_id_by_bucket_name(bucket.clone())
-            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
-        let Some(document_id) = document_id else {
-            return Err(s3_error!(NoSuchBucket));
-        };
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?
+            .ok_or_else(|| s3_error!(NoSuchBucket))?;
+
         let document_id = NamespaceId::from_str(document_id.as_str())
             .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
         let bucket_doc = docs
             .open(document_id)
             .await
-            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
-        let Some(bucket_doc) = bucket_doc else {
-            return Err(s3_error!(NoSuchBucket));
-        };
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?
+            .ok_or_else(|| s3_error!(NoSuchBucket))?;
 
         let object_query = Query::key_prefix("object");
         let entries = bucket_doc
@@ -626,12 +713,12 @@ impl S3 for HorizonS3System {
             let key = entry.key();
             let key = String::from_utf8_lossy(key);
             let key = key.strip_prefix("object::").unwrap();
-
-            let object = Object {
-                key: Some(key.to_string()),
-                ..Default::default()
-            };
-            Ok(object)
+            key.strip_prefix("object::")
+                .map(|key| Object {
+                    key: Some(key.to_string()),
+                    ..Default::default()
+                })
+                .ok_or(anyhow::anyhow!("Failed to convert object"))
         });
         let entries = entries.collect::<Vec<_>>().await;
         let objects = entries
@@ -673,41 +760,38 @@ impl S3 for HorizonS3System {
             body,
             bucket,
             key,
-            metadata,
+            mut metadata,
             ..
         } = input;
 
         let document_id = self
             .get_id_by_bucket_name(bucket)
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?
+            .ok_or_else(|| s3_error!(NoSuchBucket))?;
+
+        let document_id = NamespaceId::from_str(&document_id)
             .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
-        let Some(document_id) = document_id else {
-            return Err(s3_error!(NoSuchBucket));
-        };
-        let document_id = NamespaceId::from_str(document_id.as_str())
-            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
         let bucket_doc = docs
             .open(document_id)
             .await
-            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
-        let Some(bucket_doc) = bucket_doc else {
-            return Err(s3_error!(NoSuchBucket));
-        };
-        let Some(body) = body else {
-            return Err(s3_error!(IncompleteBody));
-        };
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?
+            .ok_or_else(|| s3_error!(NoSuchBucket))?;
 
-        let mut checksum: s3s::checksum::ChecksumHasher = default();
-        if input.checksum_crc32.is_some() {
-            checksum.crc32 = Some(default());
-        }
-        if input.checksum_crc32c.is_some() {
-            checksum.crc32c = Some(default());
-        }
-        if input.checksum_sha1.is_some() {
-            checksum.sha1 = Some(default());
-        }
-        if input.checksum_sha256.is_some() {
-            checksum.sha256 = Some(default());
+        let body = body.ok_or_else(|| s3_error!(IncompleteBody))?;
+
+        let mut checksum = s3s::checksum::ChecksumHasher::default();
+        match (
+            input.checksum_crc32,
+            input.checksum_crc32c,
+            input.checksum_sha1,
+            input.checksum_sha256,
+        ) {
+            (Some(_), _, _, _) => checksum.crc32 = Some(Default::default()),
+            (_, Some(_), _, _) => checksum.crc32c = Some(Default::default()),
+            (_, _, Some(_), _) => checksum.sha1 = Some(Default::default()),
+            (_, _, _, Some(_)) => checksum.sha256 = Some(Default::default()),
+            _ => {}
         }
 
         let progress = blobs
@@ -735,15 +819,18 @@ impl S3 for HorizonS3System {
             .await
             .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
         // if there is some metadata link it as well
-        if let Some(data) = metadata {
-            let serialized = serde_cbor::to_vec(&data)
-                .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        let now = OffsetDateTime::now_utc().format(&Rfc3339).unwrap();
+        metadata
+            .get_or_insert_with(Default::default)
+            .insert("LastModified".to_string(), now);
 
-            bucket_doc
-                .set_bytes(author_id, format!("metadata::{}", key), serialized)
-                .await
-                .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
-        }
+        let serialized = serde_cbor::to_vec(&metadata)
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        bucket_doc
+            .set_bytes(author_id, format!("metadata::{}", key), serialized)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
 
         // let mut md5_hash = <Md5 as Digest>::new();
         // let stream = body.inspect_ok(|bytes| {
@@ -796,13 +883,6 @@ impl S3 for HorizonS3System {
         &self,
         _req: S3Request<UploadPartCopyInput>,
     ) -> S3Result<S3Response<UploadPartCopyOutput>> {
-        todo!()
-    }
-
-    async fn list_parts(
-        &self,
-        _req: S3Request<ListPartsInput>,
-    ) -> S3Result<S3Response<ListPartsOutput>> {
         todo!()
     }
 

@@ -49,6 +49,7 @@ bytes = "1.5"
 base64 = "0.21"
 tempfile = "3.10"
 dirs-next = { workspace = true }
+url = { workspace = true }
 
 num_cpus = { workspace = true }
 

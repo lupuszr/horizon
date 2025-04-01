@@ -12,10 +12,10 @@ members = [
 resolver = "2"
 
 [profile.dev]
-incremental = true
+# incremental = true
 opt-level = 0
-debug = 1
-split-debuginfo = "packed"
+debug = true
+split-debuginfo = "unpacked"
 
 [profile.release]
 opt-level = 3
@@ -132,7 +132,8 @@ deno_error = { version = "0.5.5", features = [
 ] }
 wasmtime = "29.0.1"
 wasmtime-wasi = "29.0.1"
-
+time = { version = "0.3.36", features = ["formatting", "parsing", "macros"] }
+url = "2.5.4"
 # [workspace.dev-dependencies]
 # tokio-test = "0.4"
 # mockall = "0.12"

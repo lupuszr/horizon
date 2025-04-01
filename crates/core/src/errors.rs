@@ -102,6 +102,12 @@ pub enum AppError {
 
     #[error("Bucket already imported")]
     S3BucketExists,
+
+    #[error("S3 metadata miss")]
+    S3MetadataMiss,
+
+    #[error("App service error: {0}")]
+    AppServiceError(String),
 }
 
 impl<T> From<PoisonError<T>> for AppError {

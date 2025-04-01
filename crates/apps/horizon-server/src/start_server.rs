@@ -12,11 +12,26 @@ use tokio::sync::mpsc;
 pub struct HorizonServerStart {
     #[clap(short, long, default_value = None)]
     pub base_path: Option<PathBuf>,
+
+    #[clap(short, long, default_value = None)]
+    pub access_key: Option<String>,
+
+    #[clap(short, long, default_value = None)]
+    pub secret_key: Option<String>,
+
+    #[clap(short, long, default_value = "http://0.0.0.0:3000")]
+    pub domain_name: url::Url,
 }
 
 impl HorizonServerStart {
     pub async fn eval(self, sender: mpsc::Sender<HorizonChannel>) -> Result<bool, AppError> {
-        let Self { base_path, .. } = self;
+        let Self {
+            base_path,
+            access_key,
+            secret_key,
+            domain_name,
+            ..
+        } = self;
 
         let iroh_base_path = if base_path.is_none() {
             let mut ph = dirs_next::home_dir().ok_or(AppError::InternalStateError(
@@ -32,15 +47,20 @@ impl HorizonServerStart {
             .await
             .map_err(|err| AppError::IrohHorizonStateSetupError(err.to_string()))?;
 
+        let address = format!(
+            "{}:{}",
+            domain_name.host_str().unwrap_or("0.0.0.0"),
+            domain_name.port_or_known_default().unwrap_or(3000)
+        );
         let s3 = HorizonS3System::new_with_iroh(iroh_state);
-        let domain_name = "0.0.0.0:3000";
         let api_state = ApiState {
             s3,
-            domain_name: domain_name.to_string(),
+            domain_name: address.clone(),
+            access_key,
+            secret_key,
         };
-        // todo: extract address
 
-        run_api_server(api_state, domain_name).await?;
+        run_api_server(api_state, &address).await?;
 
         tokio::signal::ctrl_c()
             .await

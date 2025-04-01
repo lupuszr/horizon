@@ -28,6 +28,40 @@ HorizonPush acts as an S3 proxy with intelligent caching:
 - 💾 **Local-First Syncing**: Keeps frequently accessed files locally.
 - 🗄️ **Transparent Caching**: Moves rarely used files to S3 storage.
 
+Working with awscli
+
+At the moment signing is not implemented, so if you want to test you should not
+sign the request. This will be solved in the near future
+
+1. create a bucket
+```sh
+aws --endpoint-url http://localhost:3000/s3 s3 mb s3://horizon_bucket --no-sign-request
+```
+
+2. copy an object to the bucket
+```sh
+aws --endpoint-url http://localhost:3000/s3 s3 cp my_test_file.txt s3://horizon_bucket --no-sign-request  
+```
+
+3. check the head of the object
+```sh
+aws --endpoint-url http://localhost:3000/s3 s3api head-object --bucket blutona --key README.md --no-sign-request
+```
+
+4. export the bucket ticket for another horizon node
+```sh
+
+```
+
+5. import the bucket ticket from another horizon node
+```sh
+```
+
+5. download the object
+```sh
+aws --endpoint-url http://localhost:3000/s3 s3 cp s3://blutona/README.md README-down.md --no-sign-request
+```
+
 ## 🖥️ Tauri Desktop App
 
 The HorizonPush desktop application provides a native UI for:
