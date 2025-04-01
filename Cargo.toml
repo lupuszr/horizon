@@ -1,20 +1,21 @@
 [workspace]
 members = [
-    # "crates/api",
+    "crates/api",
     "crates/storage",
     # "crates/auth",
     "crates/core",
     "crates/plugin",
     "crates/apps/horizon-push/src-tauri",
     "crates/apps/horizon-push/src-cli",
+    "crates/apps/horizon-server",
 ]
 resolver = "2"
 
 [profile.dev]
-incremental = true
+# incremental = true
 opt-level = 0
-debug = 1
-split-debuginfo = "packed"
+debug = true
+split-debuginfo = "unpacked"
 
 [profile.release]
 opt-level = 3
@@ -25,7 +26,7 @@ panic = "abort"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["vikpelle@gmail.com"]
+authors = ["lupuszr <vikpelle@gmail.com>"]
 
 
 [workspace.dependencies]
@@ -33,10 +34,12 @@ authors = ["vikpelle@gmail.com"]
 tokio = { version = "1.36", features = ["full"] }
 # tokio = { version = "1.43", features = ["sync", "macros", "io-util", "rt", "time"] }
 axum = { version = "0.7", features = ["multipart"] }
-tower = "0.4"
+tower = "0.5.2"
 hyper = { version = "1.6.0" }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "http1"] }
+
 async-trait = "0.1.83"
-tower-http = { version = "0.5", features = ["trace", "cors"] }
+tower-http = { version = "0.6.2", features = ["trace", "cors"] }
 futures = "0.3.31"
 tokio-util = { version = "0.7", features = ["io"] }
 tokio-stream = "0.1"
@@ -109,8 +112,10 @@ dirs-next = "2.0.0"
 uuid = { version = "1.7", features = ["v4", "serde"] }
 
 # S3 support
-s3s = { git = "https://github.com/Nugine/s3s", version = "0.11.0-dev" }
-s3s-aws = { git = "https://github.com/Nugine/s3s", version = "0.11.0-dev" }
+s3s = { git = "https://github.com/Nugine/s3s", branch = "main", features = [
+    "tower",
+] }
+s3s-aws = { git = "https://github.com/Nugine/s3s", branch = "main" }
 aws-sdk-s3 = "1.78.0"
 aws-config = { version = "1.5.18", default-features = false }
 aws-credential-types = { version = "1.2.1", features = ["test-util"] }
@@ -127,7 +132,8 @@ deno_error = { version = "0.5.5", features = [
 ] }
 wasmtime = "29.0.1"
 wasmtime-wasi = "29.0.1"
-
+time = { version = "0.3.36", features = ["formatting", "parsing", "macros"] }
+url = "2.5.4"
 # [workspace.dev-dependencies]
 # tokio-test = "0.4"
 # mockall = "0.12"

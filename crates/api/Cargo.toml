@@ -6,14 +6,10 @@ authors.workspace = true
 
 [dependencies]
 horizon-core = { path = "../core" }
-horizon-auth = { path = "../auth" }
-horizon-storage = { path = "../storage" }
-horizon-streaming = { path = "../streaming" }
-horizon-video = { path = "../video" }
 
 # Web framework and middleware
 axum.workspace = true
-tower.workspace = true
+tower = { workspace = true }
 tower-http.workspace = true
 hyper = { version = "1.1", features = ["full"] }
 
@@ -40,13 +36,20 @@ serde_json.workspace = true
 validator = { version = "0.16", features = ["derive"] }
 
 # OpenAPI documentation
-utoipa = { version = "4.1", features = ["axum"] }
-utoipa-swagger-ui = "5.0"
+# utoipa = { version = "4.1", features = ["axum"] }
+# utoipa-swagger-ui = "5.0"
 
 # Error handling and logging
 thiserror.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
+
+s3s = { workspace = true, features = ["tower"] }
+s3s-aws = { workspace = true }
+aws-sdk-s3 = { workspace = true, features = ["behavior-version-latest"] }
+aws-config = { workspace = true }
+aws-credential-types = { workspace = true }
+hyper-util = { workspace = true }
 
 # Metrics
 metrics = "0.21"
