@@ -4,6 +4,60 @@
 
 HorizonPush is a file-sharing and synchronization tool leveraging `iroh` for peer-to-peer transfers and multi-provider blob streaming. It provides an extensible WebAssembly (Wasm) API, integrates with S3 for storage, and includes a Tauri-based desktop application.
 
+## 🏛️ Architecture
+
+```mermaid
+flowchart TD
+    Client([Client Request]) --> HorizonNode
+    
+    subgraph "Edge Compute Layer"
+        HorizonNode["Horizon Node<br><small>(Edge Compute Node)</small>"] --> WasmEngine
+        
+        subgraph "Wasm Plugin System"
+            WasmEngine{{"Wasm Runtime Engine"}}
+            WasmEngine --> Plugin1[["Transform Plugin"]]
+            WasmEngine --> Plugin2[["Auth Plugin"]]
+            WasmEngine --> Plugin3[["Caching Plugin"]]
+            WasmEngine --> Plugin4[["Custom Logic..."]]
+        end
+        
+        WasmEngine --> IrohNode
+        
+        subgraph "Iroh Storage"
+            IrohNode[Iroh Node]
+            IrohNode --> IrohDocs[(Iroh Documents)]
+            IrohNode --> IrohBlobs[(Iroh Blobs)]
+        end
+    end
+    
+    IrohNode -- "Cache Miss/Not Found" --> FallbackMechanism
+    
+    subgraph "Fallback Layer"
+        FallbackMechanism{Fallback Mechanism}
+        FallbackMechanism --> AWS[(AWS S3)]
+        FallbackMechanism --> GCP[(GCP Storage)]
+        FallbackMechanism --> Azure[(Azure Blob)]
+        FallbackMechanism --> Other[(Other S3 Providers)]
+    end
+    
+    AWS & GCP & Azure & Other --> CacheUpdate[Update Iroh Storage]
+    CacheUpdate --> IrohDocs
+    CacheUpdate --> IrohBlobs
+    
+    IrohDocs & IrohBlobs --> Response([Response to Client])
+    FallbackMechanism --> Response
+    
+    classDef edge fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef storage fill:#bbf,stroke:#33f,stroke-width:1px;
+    classDef fallback fill:#fbb,stroke:#f33,stroke-width:1px;
+    classDef wasm fill:#bfb,stroke:#3b3,stroke-width:1px;
+    
+    class HorizonNode,IrohNode edge;
+    class WasmEngine,Plugin1,Plugin2,Plugin3,Plugin4 wasm;
+    class IrohDocs,IrohBlobs storage;
+    class AWS,GCP,Azure,Other,FallbackMechanism fallback;
+```
+
 ## ⭐ Features
 
 - 📂 **Decentralized File Sharing**: Uses `iroh-blobs` for secure, verifiable blob transfers.
