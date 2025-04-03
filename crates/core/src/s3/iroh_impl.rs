@@ -6,6 +6,7 @@ use iroh_docs::store::Query;
 use iroh_docs::{CapabilityKind, DocTicket, NamespaceId};
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
+use uuid::Uuid;
 
 use std::collections::HashMap;
 
@@ -867,9 +868,79 @@ impl S3 for HorizonS3System {
 
     async fn create_multipart_upload(
         &self,
-        _req: S3Request<CreateMultipartUploadInput>,
+        req: S3Request<CreateMultipartUploadInput>,
     ) -> S3Result<S3Response<CreateMultipartUploadOutput>> {
-        todo!()
+        let HorizonS3System { iroh_state, .. } = self;
+        let IrohState { docs, .. } = iroh_state;
+        let input = req.input;
+        let credentials = req.credentials.as_ref();
+
+        let CreateMultipartUploadInput {
+            bucket,
+            key,
+            mut metadata,
+            ..
+        } = input;
+        let document_id = self
+            .get_id_by_bucket_name(bucket.clone())
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?
+            .ok_or_else(|| s3_error!(NoSuchBucket))?;
+
+        let document_id = NamespaceId::from_str(&document_id)
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let bucket_doc = docs
+            .open(document_id)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?
+            .ok_or_else(|| s3_error!(NoSuchBucket))?;
+
+        let author_id = docs
+            .authors()
+            .default()
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        // generate an unique upload id
+        let upload_id = Uuid::new_v4();
+        let access_key = credentials.map(|cr| cr.access_key.as_str());
+        let pair = access_key.map(|ack| format!("{}-{}", ack, key));
+        let hash = pair
+            .map(|cr| iroh_blake3::hash(cr.as_str().as_bytes()))
+            .ok_or(S3ErrorCode::Custom("identifier creation failed".into()))?;
+        println!("access key:: {:?}", access_key);
+
+        // Link the blob the the doc that represents the specified bucket
+        bucket_doc
+            .set_bytes(
+                author_id,
+                format!("part_identifier::{}", upload_id.to_string()),
+                hash.to_string().clone(),
+            )
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+        // if there is some metadata link it as well
+        let now = OffsetDateTime::now_utc().format(&Rfc3339).unwrap();
+        metadata
+            .get_or_insert_with(Default::default)
+            .insert("LastModified".to_string(), now);
+
+        let serialized = serde_cbor::to_vec(&metadata)
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        bucket_doc
+            .set_bytes(author_id, format!("metadata::{}", key), serialized)
+            .await
+            .map_err(|err| S3ErrorCode::Custom(err.to_string().into()))?;
+
+        let output = CreateMultipartUploadOutput {
+            bucket: Some(bucket),
+            key: Some(key),
+            upload_id: Some(upload_id.to_string()),
+            ..Default::default()
+        };
+
+        Ok(S3Response::new(output))
     }
 
     async fn upload_part(

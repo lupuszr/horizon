@@ -38,6 +38,7 @@ multibase.workspace = true
 
 
 iroh = { workspace = true, features = ["discovery-local-network"] }
+iroh-blake3 = { workspace = true }
 iroh-base = { workspace = true }
 quic-rpc = { workspace = true }
 iroh-docs = { workspace = true }
