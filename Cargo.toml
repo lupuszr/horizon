@@ -68,6 +68,7 @@ quic-rpc = { version = "0.17" }
 iroh-docs = { version = "0.33", features = ["rpc"] }
 iroh-blobs = { version = "0.33", features = ["rpc"] }
 iroh-gossip = { version = "0.33", features = ["rpc"] }
+iroh-blake3 = { version = "1.4.5" }
 iroh-node-util = "0.33"
 
 
